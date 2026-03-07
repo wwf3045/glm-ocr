@@ -26,9 +26,17 @@ The [OmniDocBench v1.5](https://opendatalab.com/omnidocbench) benchmark ([GitHub
 
 ### Pricing
 
-GLM-OCR API starts at just **¥2.9** (~$0.40 / €0.37) for 50 million tokens via [ZhipuAI special deals](https://bigmodel.cn/special_area) — enough to OCR **~60 textbooks** (300 pages each). Standard rate: ¥0.2/M tokens (~$0.03 / €0.03), roughly 1/100 the cost of GPT-4o Vision.
+Via [ZhipuAI special deals](https://bigmodel.cn/special_area), 50 million tokens (enough to OCR **~60 textbooks** at 300 pages each):
 
-> Full pricing tiers → [Appendix: API Pricing](#appendix-api-pricing-details)
+| Tier | Price | ~ USD | ~ EUR |
+|------|-------|-------|-------|
+| Flash sale (1× per account) | **¥2.9** | $0.40 | €0.37 |
+| Developer / Education (3× per account) | **¥8** | $1.10 | €1.02 |
+| Standard (no package) | ¥10 | $1.38 | €1.28 |
+
+Standard per-token rate: ¥0.2/M tokens (~$0.03 / €0.03), roughly 1/100 the cost of GPT-4o Vision.
+
+> Full pricing breakdown → [Appendix: API Pricing](#appendix-api-pricing-details)
 
 ### Comparison Summary
 
