@@ -24,6 +24,12 @@ Batch convert documents to clean Markdown using [ZhipuAI GLM-4v-flash](https://o
 
 The [OmniDocBench v1.5](https://opendatalab.com/omnidocbench) benchmark ([GitHub](https://github.com/opendatalab/OmniDocBench)) is the most comprehensive OCR evaluation. As of early February 2026, GLM-OCR ranked **#1** in a 5-model head-to-head test (vs DeepSeek OCR2, MinerU, PaddleOCR VL, PaddleOCR VL 1.5). Around late February 2026, [Unisound U1](https://www.prnewswire.com/news-releases/unisound-u1-ocr-the-first-industrial-grade-document-intelligence-foundation-model-ushering-in-the-ocr-3-0-era-302698482.html) surpassed GLM-OCR on the leaderboard (95.1 vs 94.62), particularly excelling in medical/clinical document scenarios.
 
+### Pricing
+
+GLM-OCR API starts at just **¥2.9** (~$0.40 / €0.37) for 50 million tokens via [ZhipuAI special deals](https://bigmodel.cn/special_area) — enough to OCR **~60 textbooks** (300 pages each). Standard rate: ¥0.2/M tokens (~$0.03 / €0.03), roughly 1/100 the cost of GPT-4o Vision.
+
+> Full pricing tiers → [Appendix: API Pricing](#appendix-api-pricing-details)
+
 ### Comparison Summary
 
 | Solution | OmniDocBench v1.5 | Best For | Weaknesses | Deployment |
@@ -45,12 +51,6 @@ The script architecture is model-agnostic — swapping to a different API (DeepS
 > - [OCR model selection guide (2026.02)](https://www.bilibili.com/video/BV1GYF7z9E7n/) by [@从零开始学AI](https://space.bilibili.com/91394217)
 > - [OmniDocBench v1.5 benchmark](https://github.com/opendatalab/OmniDocBench)
 > - [Unisound U1 OCR announcement](https://www.bilibili.com/video/BV1rqAUzAE4z/)
-
-### Pricing
-
-GLM-OCR API starts at just **¥2.9** (~$0.40 / €0.37) for 50 million tokens via [ZhipuAI special deals](https://bigmodel.cn/special_area) — enough to OCR **~60 textbooks** (300 pages each). Standard rate: ¥0.2/M tokens (~$0.03 / €0.03), roughly 1/100 the cost of GPT-4o Vision.
-
-> Full pricing tiers → [Appendix: API Pricing](#appendix-api-pricing-details)
 
 ## Quick Start
 

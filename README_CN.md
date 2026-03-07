@@ -24,6 +24,12 @@
 
 [OmniDocBench v1.5](https://opendatalab.com/omnidocbench)（[GitHub](https://github.com/opendatalab/OmniDocBench)）是目前最全面的 OCR 评测基准。截至 2026 年 2 月初，GLM-OCR 在 5 模型对比测试中综合排名**第一**（vs DeepSeek OCR2、MinerU、PaddleOCR VL、PaddleOCR VL 1.5）。2026 年 2 月底，[云知声 U1](https://www.bilibili.com/video/BV1rqAUzAE4z/) 在榜单上超越了 GLM-OCR（95.1 vs 94.62），尤其在医疗/病历文档场景表现突出。
 
+### 价格
+
+GLM-OCR API 低至 **¥2.9**（~$0.40 / €0.37）即可获得 5000 万 tokens 资源包（[智谱特惠专区](https://bigmodel.cn/special_area)）—— 足够 OCR **约 60 本教材**（每本 300 页）。标准价 ¥0.2/百万 tokens（~$0.03 / €0.03），仅为 GPT-4o Vision 的 1/100。
+
+> 完整价格分档 → [附录：API 定价详情](#附录api-定价详情)
+
 ### 方案对比总结
 
 | 方案 | OmniDocBench v1.5 | 最适合 | 劣势 | 部署方式 |
@@ -45,12 +51,6 @@
 > - [OCR 模型选型指南（2026.02）](https://www.bilibili.com/video/BV1GYF7z9E7n/) by [@从零开始学AI](https://space.bilibili.com/91394217)
 > - [OmniDocBench v1.5 榜单](https://github.com/opendatalab/OmniDocBench)
 > - [云知声 U1 OCR 发布](https://www.bilibili.com/video/BV1rqAUzAE4z/)
-
-### 价格
-
-GLM-OCR API 低至 **¥2.9**（~$0.40 / €0.37）即可获得 5000 万 tokens 资源包（[智谱特惠专区](https://bigmodel.cn/special_area)）—— 足够 OCR **约 60 本教材**（每本 300 页）。标准价 ¥0.2/百万 tokens（~$0.03 / €0.03），仅为 GPT-4o Vision 的 1/100。
-
-> 完整价格分档 → [附录：API 定价详情](#附录api-定价详情)
 
 ## 快速开始
 
