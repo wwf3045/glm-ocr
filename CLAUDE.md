@@ -15,7 +15,7 @@ python clean_junk_images.py    # Remove junk images from output
 
 ## Architecture
 
-- `ocr.py` — Main OCR script. Segments PDFs (20 pages/segment), PPTs (50 pages/segment), and long images (4000px/segment). Uses GLM-4v-flash API with automatic fallback (file upload → per-page image).
+- `ocr.py` — Main OCR script. Segments PDFs (20 pages/segment), PPTs (50 pages/segment), and long images (4000px/segment). Uses GLM-OCR API (`zai` SDK, `layout_parsing.create`) with automatic fallback (file upload → per-page image). Concurrent processing (MAX_WORKERS=2).
 - `clean_junk_images.py` — Removes background images (~3.2MB) and tiny icons (<3KB) from OCR output, cleans Markdown references.
 - `.env` — Must contain `GLM_API_KEY=xxx` (ZhipuAI API key). Never commit this file.
 
@@ -23,6 +23,6 @@ python clean_junk_images.py    # Remove junk images from output
 
 - Do not modify `.env` or commit API keys
 - `input/` and `output/` are gitignored — do not track data files
-- Source files in `input/` are auto-deleted after successful OCR
+- Source files in `input/` are preserved after processing (not auto-deleted)
 - Resume support: already-completed segments are skipped on re-run
-- PPT/PPTX requires LibreOffice installed for PDF conversion
+- PPT/PPTX requires PowerPoint or WPS Office (COM automation) for PDF conversion

@@ -3,4 +3,15 @@ output/
 .env
 __pycache__/
 *.pyc
+*.log
+*.txt
 _tmp_segment_*
+
+# Personal workflow scripts (Obsidian integration, etc.)
+move_lecture_ocr.py
+move_textbook_ocr.py
+prepare_lectures.py
+separate_ocr.py
+auto_rerun.py
+cleanup_api_files.py
+ocr_feb19_original.py

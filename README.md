@@ -2,7 +2,7 @@ English | [简体中文](README_CN.md)
 
 # GLM-OCR — PDF/PPT/Image to Markdown OCR Converter
 
-Batch convert documents to clean Markdown using [ZhipuAI GLM-4v-flash](https://open.bigmodel.cn/) API — the [#1 OCR model on OmniDocBench v1.5](https://opendatalab.com/omnidocbench) as of early 2026. Zero GPU required, LaTeX math support, resume from breakpoint.
+Batch convert documents to clean Markdown using [ZhipuAI GLM-OCR](https://open.bigmodel.cn/) API — the [#1 OCR model on OmniDocBench v1.5](https://opendatalab.com/omnidocbench) as of early 2026. Zero GPU required, LaTeX math support, concurrent processing, resume from breakpoint.
 
 ## Features
 
@@ -98,11 +98,11 @@ python ocr.py
 ```
 output/
 └── filename/
-    ├── segment_1.md      # Pages 1-20
-    ├── segment_2.md      # Pages 21-40
+    ├── filename_0001-0020.md    # Pages 1-20
+    ├── filename_0021-0040.md    # Pages 21-40
     ├── ...
-    └── images/           # Extracted images
-        ├── page_3_img_1.png
+    └── images/                  # Extracted bbox images
+        ├── p0003_fig0001.png
         └── ...
 ```
 
@@ -118,24 +118,25 @@ Removes common OCR artifacts (background images ~3.2MB, icons <3KB) and cleans u
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `PDF_SEGMENT_SIZE` | 20 | Pages per segment for PDF |
-| `PPT_SEGMENT_SIZE` | 50 | Pages per segment for PPT |
+| `PAGES_PER_MD_PDF` | 20 | Pages per segment for PDF |
+| `PAGES_PER_MD_PPT` | 50 | Pages per segment for PPT |
+| `MAX_WORKERS` | 2 | Max concurrent API calls |
 | `IMAGE_SEGMENT_HEIGHT` | 4000px | Max height per segment for long images |
 | `IMAGE_OVERLAP` | 200px | Overlap between adjacent image segments |
 
 ## Requirements
 
 - Python 3.8+
-- [ZhipuAI API key](https://open.bigmodel.cn/) (GLM-4v-flash is free-tier)
-- LibreOffice (only for PPT/PPTX conversion)
+- [ZhipuAI API key](https://open.bigmodel.cn/)
+- PowerPoint or WPS Office (only for PPT/PPTX conversion, via COM automation)
 
 ## Known Limitations
 
 - **Hallucination**: GLM may guess plausible values for blurry text instead of returning errors — avoid for financial/medical documents requiring exact precision
 - **Repetition bug**: Occasionally loops on dense Excel screenshots, repeating the same row
 - **Handwriting**: Weak on handwritten content — use Claude or GPT instead
-- PPT/PPTX files are first converted to PDF via LibreOffice before OCR
-- Source files are automatically deleted from `input/` after successful processing
+- PPT/PPTX files are first converted to PDF via COM automation (PowerPoint/WPS) before OCR
+- Source files in `input/` are preserved after processing
 
 ## License
 

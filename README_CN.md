@@ -2,7 +2,7 @@
 
 # GLM-OCR — PDF/PPT/图片转Markdown OCR工具
 
-使用[智谱 GLM-4v-flash](https://open.bigmodel.cn/) API 批量将文档转换为干净的 Markdown —— 2026 年初 [OmniDocBench v1.5 榜首模型](https://opendatalab.com/omnidocbench)。零 GPU 要求，支持 LaTeX 公式，断点续传。
+使用[智谱 GLM-OCR](https://open.bigmodel.cn/) API 批量将文档转换为干净的 Markdown —— 2026 年初 [OmniDocBench v1.5 榜首模型](https://opendatalab.com/omnidocbench)。零 GPU 要求，支持 LaTeX 公式，并发处理，断点续传。
 
 ## 功能特点
 
@@ -98,11 +98,11 @@ python ocr.py
 ```
 output/
 └── 文件名/
-    ├── segment_1.md      # 第 1-20 页
-    ├── segment_2.md      # 第 21-40 页
+    ├── 文件名_0001-0020.md    # 第 1-20 页
+    ├── 文件名_0021-0040.md    # 第 21-40 页
     ├── ...
-    └── images/           # 提取的图片
-        ├── page_3_img_1.png
+    └── images/                # 提取的 bbox 图片
+        ├── p0003_fig0001.png
         └── ...
 ```
 
@@ -118,24 +118,25 @@ python clean_junk_images.py
 
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
-| `PDF_SEGMENT_SIZE` | 20 | PDF 每段页数 |
-| `PPT_SEGMENT_SIZE` | 50 | PPT 每段页数 |
+| `PAGES_PER_MD_PDF` | 20 | PDF 每段页数 |
+| `PAGES_PER_MD_PPT` | 50 | PPT 每段页数 |
+| `MAX_WORKERS` | 2 | API 最大并发数 |
 | `IMAGE_SEGMENT_HEIGHT` | 4000px | 长图每段最大高度 |
 | `IMAGE_OVERLAP` | 200px | 相邻段重叠像素 |
 
 ## 环境要求
 
 - Python 3.8+
-- [智谱 API Key](https://open.bigmodel.cn/)（GLM-4v-flash 为免费模型）
-- LibreOffice（仅 PPT/PPTX 转换需要）
+- [智谱 API Key](https://open.bigmodel.cn/)
+- PowerPoint 或 WPS Office（仅 PPT/PPTX 转换需要，通过 COM 自动化）
 
 ## 已知局限
 
 - **幻觉问题**：GLM 对模糊文字会猜测合理值而非报错——财务/医疗等需要绝对精度的场景慎用
 - **复读 bug**：处理极度密集的 Excel 截图时偶尔会循环输出同一行
 - **手写识别差**：手写场景建议用 Claude 或 GPT
-- PPT/PPTX 文件会先通过 LibreOffice 转为 PDF 再处理
-- 处理成功后，源文件会自动从 `input/` 中删除
+- PPT/PPTX 文件会先通过 COM 自动化（PowerPoint/WPS）转为 PDF 再处理
+- 源文件在处理后保留在 `input/` 中，不会自动删除
 
 ## 开源协议
 

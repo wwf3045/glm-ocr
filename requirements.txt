@@ -1,4 +1,4 @@
-zhipuai
+zai-sdk
 PyMuPDF
 python-dotenv
 Pillow
