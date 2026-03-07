@@ -46,6 +46,12 @@ The script architecture is model-agnostic — swapping to a different API (DeepS
 > - [OmniDocBench v1.5 benchmark](https://github.com/opendatalab/OmniDocBench)
 > - [Unisound U1 OCR announcement](https://www.bilibili.com/video/BV1rqAUzAE4z/)
 
+### Pricing
+
+GLM-OCR API starts at just **¥2.9** (~$0.40 / €0.37) for 50 million tokens via [ZhipuAI special deals](https://bigmodel.cn/special_area) — enough to OCR **~60 textbooks** (300 pages each). Standard rate: ¥0.2/M tokens (~$0.03 / €0.03), roughly 1/100 the cost of GPT-4o Vision.
+
+> Full pricing tiers → [Appendix: API Pricing](#appendix-api-pricing-details)
+
 ## Quick Start
 
 ### 1. Get API Key
@@ -162,5 +168,28 @@ MIT
 | GLM-OCR | Handwritten digits all correct, table format correct, but header info lost |
 | MinerU | Table recognition completely wrong |
 | DeepSeek OCR2 | Zero info loss but table separated from header |
+
+</details>
+
+---
+
+## Appendix: API Pricing Details
+
+> Source: [ZhipuAI Special Deals](https://bigmodel.cn/special_area) · [Standard Pricing](https://bigmodel.cn/pricing) (as of March 2026)
+
+<details>
+<summary>Click to expand</summary>
+
+| Tier | Package | Price | Per M tokens | Limit |
+|------|---------|-------|--------------|-------|
+| **Flash sale** | 50M tokens / 3 months | ¥2.9 ($0.40 / €0.37) | ¥0.058 | 1× per account |
+| **Developer** | 50M tokens / 3 months | ¥8 ($1.10 / €1.02) | ¥0.16 | 3× per account |
+| **Education** | 50M tokens / 3 months | ¥8 ($1.10 / €1.02) | ¥0.16 | 3× per account |
+| **Enterprise** | 10B tokens / 4 months | ¥1,600 ($221 / €204) | ¥0.16 | 3× per account |
+| Standard (no package) | Pay-as-you-go | — | ¥0.2 ($0.03 / €0.03) | Unlimited |
+
+**Cost estimate**: ~2,500 tokens per page (image input + markdown output). A 300-page textbook ≈ 750K tokens ≈ ¥0.15 at standard rate.
+
+*Exchange rates: 1 USD ≈ 7.25 CNY, 1 EUR ≈ 7.85 CNY (approximate, March 2026)*
 
 </details>

@@ -46,6 +46,12 @@
 > - [OmniDocBench v1.5 榜单](https://github.com/opendatalab/OmniDocBench)
 > - [云知声 U1 OCR 发布](https://www.bilibili.com/video/BV1rqAUzAE4z/)
 
+### 价格
+
+GLM-OCR API 低至 **¥2.9**（~$0.40 / €0.37）即可获得 5000 万 tokens 资源包（[智谱特惠专区](https://bigmodel.cn/special_area)）—— 足够 OCR **约 60 本教材**（每本 300 页）。标准价 ¥0.2/百万 tokens（~$0.03 / €0.03），仅为 GPT-4o Vision 的 1/100。
+
+> 完整价格分档 → [附录：API 定价详情](#附录api-定价详情)
+
 ## 快速开始
 
 ### 1. 获取 API Key
@@ -162,5 +168,28 @@ MIT
 | GLM-OCR | 手写数字全部正确，表格格式正确，但表头信息全丢、复选框遗漏 |
 | MinerU | 表格识别完全错误 |
 | DeepSeek OCR2 | 信息零丢失，但表头与数据分离 |
+
+</details>
+
+---
+
+## 附录：API 定价详情
+
+> 来源：[智谱特惠专区](https://bigmodel.cn/special_area) · [标准价格](https://bigmodel.cn/pricing)（截至 2026 年 3 月）
+
+<details>
+<summary>点击展开</summary>
+
+| 分档 | 资源包规格 | 价格 | 每百万 tokens | 限购 |
+|------|-----------|------|--------------|------|
+| **秒杀** | 5000万 tokens / 3个月 | ¥2.9（$0.40 / €0.37） | ¥0.058 | 每账号 1 次 |
+| **开发者** | 5000万 tokens / 3个月 | ¥8（$1.10 / €1.02） | ¥0.16 | 每账号 3 次 |
+| **教育** | 5000万 tokens / 3个月 | ¥8（$1.10 / €1.02） | ¥0.16 | 每账号 3 次 |
+| **企业** | 100亿 tokens / 4个月 | ¥1,600（$221 / €204） | ¥0.16 | 每账号 3 次 |
+| 标准（无资源包） | 按量付费 | — | ¥0.2（$0.03 / €0.03） | 无限制 |
+
+**成本估算**：平均每页约 2,500 tokens（图片输入 + Markdown 输出）。一本 300 页教材 ≈ 75 万 tokens ≈ 标准价 ¥0.15。
+
+*汇率参考：1 USD ≈ 7.25 CNY，1 EUR ≈ 7.85 CNY（2026 年 3 月近似值）*
 
 </details>
