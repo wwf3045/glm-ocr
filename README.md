@@ -7,6 +7,7 @@ Batch convert documents to clean Markdown using [ZhipuAI GLM-OCR](https://open.b
 ## Features
 
 - **PDF / PPT / PPTX -> Markdown**: segment-based OCR with automatic fallback (file upload -> per-page image)
+- **Concurrent processing**: process multiple segments in parallel (configurable `MAX_WORKERS`, default 2)
 - **Long screenshot support**: auto-splits tall images (e.g. chat screenshots) into overlapping segments (text OCR only, no image extraction)
 - **Resume from breakpoint**: already-completed segments are skipped on re-run
 - **Image extraction**: embedded images are saved to `images/` subfolder
