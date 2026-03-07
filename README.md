@@ -13,53 +13,26 @@ Batch convert PDF / PPT / images to Markdown using [ZhipuAI GLM-4v-flash](https:
 - **Junk image cleaner**: removes common artifacts (background images, tiny icons) from OCR output
 - **Math formula support**: LaTeX output (`$...$` inline, `$$...$$` block)
 
+## Use Cases
+
+- Convert lecture slides / textbooks to Markdown for note-taking and RAG knowledge bases
+- **WeChat chat export via screenshots**: taking long screenshots is a safer alternative to third-party export tools (no API abuse, no risk of ToS violations). OCR the screenshots into text, then feed to AI for personal assistant training
+- Batch digitize scanned documents
+- Extract text from web page screenshots
+
 ## Why GLM?
 
-The [OmniDocBench v1.5](https://github.com/opendatalab/OmniDocBench) benchmark is the most comprehensive OCR evaluation. As of early 2026, GLM-OCR ranked **#1** in a 5-model head-to-head test (vs DeepSeek OCR2, MinerU, PaddleOCR VL, PaddleOCR VL 1.5). The benchmark is actively updated — newer models like [Unisound U1](https://www.prnewswire.com/news-releases/unisound-u1-ocr-the-first-industrial-grade-document-intelligence-foundation-model-ushering-in-the-ocr-3-0-era-302698482.html) (strong in medical/clinical documents) are emerging.
-
-### Benchmark Test Results
-
-**Test 1 — Math-heavy PDF (formulas & equations)**:
-| Model | Result |
-|-------|--------|
-| GLM-OCR | Formula hierarchy perfectly restored, complete layout with chapter titles |
-| PaddleOCR VL 1.5 | Zero errors, equivalent LaTeX notation |
-| MinerU | Zero text errors, complete LaTeX structure |
-| DeepSeek OCR2 | Formula symbols missing, content loss |
-
-**Test 2 — Complex magazine (images, blurry fonts, mixed layout)**:
-| Model | Result |
-|-------|--------|
-| GLM-OCR | Only model to correctly identify all biological terms (e.g. "hemocyanin", "copper ions") |
-| PaddleOCR VL 1.5 | Close but misread specialized terminology |
-| MinerU | Many character errors on domain-specific terms |
-| DeepSeek OCR2 | Text mostly correct but images discarded, page numbers lost |
-
-**Test 3 — Handwritten vertical Chinese calligraphy**:
-| Model | Result |
-|-------|--------|
-| PaddleOCR VL | Zero errors, all 10 lines perfectly recognized |
-| GLM-OCR | Correct reading order, mostly accurate, but missed one character |
-| MinerU | Correct order but weak on calligraphic forms |
-| DeepSeek OCR2 | Completely wrong reading order |
-
-**Test 4 — Complex handwritten table (checkboxes, handwritten numbers)**:
-| Model | Result |
-|-------|--------|
-| PaddleOCR VL 1.5 | Best overall — handwritten digits correct, checkboxes detected, clean structure |
-| GLM-OCR | Handwritten digits all correct, table format correct, but header info lost |
-| MinerU | Table recognition completely wrong |
-| DeepSeek OCR2 | Zero info loss but table separated from header |
+The [OmniDocBench v1.5](https://opendatalab.com/omnidocbench) benchmark ([GitHub](https://github.com/opendatalab/OmniDocBench)) is the most comprehensive OCR evaluation. As of early February 2026, GLM-OCR ranked **#1** in a 5-model head-to-head test (vs DeepSeek OCR2, MinerU, PaddleOCR VL, PaddleOCR VL 1.5). Around late February 2026, [Unisound U1](https://www.prnewswire.com/news-releases/unisound-u1-ocr-the-first-industrial-grade-document-intelligence-foundation-model-ushering-in-the-ocr-3-0-era-302698482.html) surpassed GLM-OCR on the leaderboard (95.1 vs 94.62), particularly excelling in medical/clinical document scenarios.
 
 ### Comparison Summary
 
-| Solution | Best For | Weaknesses | Deployment |
-|----------|----------|------------|------------|
-| **GLM-OCR** (ZhipuAI / 智谱) | Structured documents, formulas, domain-specific text. 0.9B params, ~1.86 pages/sec, API ~0.2 CNY/M tokens (1/10 of traditional OCR) | Cannot extract images, no bounding box, hallucination on blurry text | Cloud API / VLLM local |
-| **PaddleOCR VL 1.5** (Baidu / 百度) | Handwriting, tables, distorted images | CUDA dependency hell, weak at logical restructuring | Local GPU only |
-| **MinerU** (OpenDataLab) | Clean PDFs with simple layout | Character errors on complex layouts | Local GPU only |
-| **DeepSeek OCR2** (DeepSeek / 深度求索) | Tables (zero info loss) | Formula errors, images discarded | Cloud API |
-| **Unisound U1** (Unisound / 云知声) | Medical/clinical documents, field-level positioning | Newer, less community testing | Cloud API |
+| Solution | OmniDocBench v1.5 | Best For | Weaknesses | Deployment |
+|----------|--------------------|----------|------------|------------|
+| **Unisound U1** (Unisound / 云知声) | **95.1** | Medical/clinical docs, field-level positioning & traceability, 50+ doc types (99%+ classification), extreme scenarios (blurred, multilingual) | Newer, less community testing, no public API pricing yet | Cloud API / On-premise |
+| **GLM-OCR** (ZhipuAI / 智谱) | **94.62** | Structured documents, formulas, domain-specific text. 0.9B params, ~1.86 pages/sec, API ~0.2 CNY/M tokens (1/10 of traditional OCR) | Cannot extract images, no bounding box, hallucination on blurry text | Cloud API / VLLM local |
+| **PaddleOCR VL 1.5** (Baidu / 百度) | **94.5** | Handwriting, tables, distorted images | CUDA dependency hell, weak at logical restructuring | Local GPU only |
+| **MinerU** (OpenDataLab) | — | Clean PDFs with simple layout | Character errors on complex layouts | Local GPU only |
+| **DeepSeek OCR2** (DeepSeek / 深度求索) | — | Tables (zero info loss) | Formula errors, images discarded | Cloud API |
 
 ### Why Cloud API?
 
@@ -131,13 +104,6 @@ Removes common OCR artifacts (background images ~3.2MB, icons <3KB) and cleans u
 | `IMAGE_SEGMENT_HEIGHT` | 4000px | Max height per segment for long images |
 | `IMAGE_OVERLAP` | 200px | Overlap between adjacent image segments |
 
-## Use Cases
-
-- Convert lecture slides / textbooks to Markdown for note-taking and RAG knowledge bases
-- **WeChat chat export via screenshots**: taking long screenshots is a safer alternative to third-party export tools (no API abuse, no risk of ToS violations). OCR the screenshots into text, then feed to AI for personal assistant training
-- Batch digitize scanned documents
-- Extract text from web page screenshots
-
 ## Requirements
 
 - Python 3.8+
@@ -155,3 +121,46 @@ Removes common OCR artifacts (background images ~3.2MB, icons <3KB) and cleans u
 ## License
 
 MIT
+
+---
+
+## Appendix: Detailed Benchmark Test Results
+
+> Source: [5-model OCR benchmark (2026.02)](https://www.bilibili.com/video/BV1UjFjz1EdD/) by [@AI创客空间](https://space.bilibili.com/396997624)
+
+<details>
+<summary>Click to expand</summary>
+
+**Test 1 — Math-heavy PDF (formulas & equations)**:
+| Model | Result |
+|-------|--------|
+| GLM-OCR | Formula hierarchy perfectly restored, complete layout with chapter titles |
+| PaddleOCR VL 1.5 | Zero errors, equivalent LaTeX notation |
+| MinerU | Zero text errors, complete LaTeX structure |
+| DeepSeek OCR2 | Formula symbols missing, content loss |
+
+**Test 2 — Complex magazine (images, blurry fonts, mixed layout)**:
+| Model | Result |
+|-------|--------|
+| GLM-OCR | Only model to correctly identify all biological terms (e.g. "hemocyanin", "copper ions") |
+| PaddleOCR VL 1.5 | Close but misread specialized terminology |
+| MinerU | Many character errors on domain-specific terms |
+| DeepSeek OCR2 | Text mostly correct but images discarded, page numbers lost |
+
+**Test 3 — Handwritten vertical Chinese calligraphy**:
+| Model | Result |
+|-------|--------|
+| PaddleOCR VL | Zero errors, all 10 lines perfectly recognized |
+| GLM-OCR | Correct reading order, mostly accurate, but missed one character |
+| MinerU | Correct order but weak on calligraphic forms |
+| DeepSeek OCR2 | Completely wrong reading order |
+
+**Test 4 — Complex handwritten table (checkboxes, handwritten numbers)**:
+| Model | Result |
+|-------|--------|
+| PaddleOCR VL 1.5 | Best overall — handwritten digits correct, checkboxes detected, clean structure |
+| GLM-OCR | Handwritten digits all correct, table format correct, but header info lost |
+| MinerU | Table recognition completely wrong |
+| DeepSeek OCR2 | Zero info loss but table separated from header |
+
+</details>
