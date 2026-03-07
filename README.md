@@ -46,11 +46,11 @@ The [OmniDocBench v1.5](https://github.com/opendatalab/OmniDocBench) benchmark i
 
 | Solution | Best For | Weaknesses | Deployment |
 |----------|----------|------------|------------|
-| **GLM-OCR** | Structured documents, formulas, domain-specific text. 0.9B params, ~1.86 pages/sec, API ~0.2 CNY/M tokens (1/10 of traditional OCR) | Cannot extract images, no bounding box, hallucination on blurry text | Cloud API / VLLM local |
-| **PaddleOCR VL 1.5** | Handwriting, tables, distorted images | CUDA dependency hell, weak at logical restructuring | Local GPU only |
-| **MinerU** | Clean PDFs with simple layout | Character errors on complex layouts | Local GPU only |
-| **DeepSeek OCR2** | Tables (zero info loss) | Formula errors, images discarded | Cloud API |
-| **Unisound U1** | Medical/clinical documents, field-level positioning | Newer, less community testing | Cloud API |
+| **GLM-OCR** (ZhipuAI / 智谱) | Structured documents, formulas, domain-specific text. 0.9B params, ~1.86 pages/sec, API ~0.2 CNY/M tokens (1/10 of traditional OCR) | Cannot extract images, no bounding box, hallucination on blurry text | Cloud API / VLLM local |
+| **PaddleOCR VL 1.5** (Baidu / 百度) | Handwriting, tables, distorted images | CUDA dependency hell, weak at logical restructuring | Local GPU only |
+| **MinerU** (OpenDataLab) | Clean PDFs with simple layout | Character errors on complex layouts | Local GPU only |
+| **DeepSeek OCR2** (DeepSeek / 深度求索) | Tables (zero info loss) | Formula errors, images discarded | Cloud API |
+| **Unisound U1** (Unisound / 云知声) | Medical/clinical documents, field-level positioning | Newer, less community testing | Cloud API |
 
 ### Why Cloud API?
 
