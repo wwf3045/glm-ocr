@@ -87,6 +87,8 @@ python clean_junk_images.py
 | **PaddleOCR v1.5** | 物理畸变场景最强（小票、褶皱、侧拍），像素级精度 | 部署地狱（CUDA 冲突、依赖报错），逻辑重组能力弱 |
 | **MinerU** | 不错的开源文档解析器 | 需要本地 GPU 部署，依赖重 |
 
+**为什么用云端 API 而不是本地模型？** 本项目面向**个人用户**（学生、研究者），不需要处理成千上万份文档。云端 API 意味着零 GPU 要求、不用配 CUDA、不用下载模型——`pip install` 即可使用。本地部署（PaddleOCR、MinerU）只适合有专用 GPU 服务器和大批量处理需求的企业场景。
+
 **结论**：如果输入是干净的数字文档（PDF、PPT、截图），GLM-OCR 输出的 Markdown 结构最干净，几乎不需要二次清洗——非常适合 RAG 知识库构建和学习笔记整理。如果是物理损坏或手写文档，建议用 PaddleOCR 或 Claude/GPT。
 
 > 参考：[OCR 模型横评（2026.02）](https://www.bilibili.com/video/BV1GYF7z9E7n/) by [@从零开始学AI](https://space.bilibili.com/91394217)

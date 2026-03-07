@@ -87,6 +87,8 @@ As of early 2026, ZhipuAI's GLM-OCR is the **top-performing model for structured
 | **PaddleOCR v1.5** | Best for physically distorted images (receipts, crumpled paper, skewed photos), pixel-level precision | Deployment nightmare (CUDA conflicts, dependency hell), weak at logical document restructuring |
 | **MinerU** | Good open-source document parser | Requires local GPU deployment, heavy dependencies |
 
+**Why cloud API instead of local models?** This project is designed for **individual users** (students, researchers) who don't need to process thousands of documents. Cloud API means zero GPU requirements, no CUDA setup, no model downloads — just `pip install` and go. Local deployment (PaddleOCR, MinerU) only makes sense for enterprises with dedicated GPU servers and massive batch processing needs.
+
 **Bottom line**: If your input is clean digital documents (PDF, PPT, screenshots), GLM-OCR produces the cleanest Markdown output with minimal post-processing — ideal for RAG knowledge bases and study notes. For physically damaged or handwritten documents, consider PaddleOCR or Claude/GPT.
 
 > Reference: [OCR model comparison (2026.02)](https://www.bilibili.com/video/BV1GYF7z9E7n/) by [@从零开始学AI](https://space.bilibili.com/91394217)
