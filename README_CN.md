@@ -24,6 +24,8 @@
 
 [OmniDocBench v1.5](https://opendatalab.com/omnidocbench)（[GitHub](https://github.com/opendatalab/OmniDocBench)）是目前最全面的 OCR 评测基准。截至 2026 年 2 月初，GLM-OCR 在 5 模型对比测试中综合排名**第一**（vs DeepSeek OCR2、MinerU、PaddleOCR VL、PaddleOCR VL 1.5）。2026 年 2 月底，[云知声 U1](https://www.bilibili.com/video/BV1rqAUzAE4z/) 在榜单上超越了 GLM-OCR（95.1 vs 94.62），尤其在医疗/病历文档场景表现突出。
 
+作为参考，通用大模型在 OmniDocBench 上的 OCR 分数远低于专用模型：**GPT-4o** 仅 75.02，**Gemini-2.5 Pro** 88.03，**Qwen3-VL-235B** 89.15 —— 专用 OCR 模型如 GLM-OCR（仅 0.9B 参数）以极小的体积和成本大幅超越它们。
+
 ### 价格
 
 通过[智谱特惠专区](https://bigmodel.cn/special_area)，5000 万 tokens（足够 OCR **约 60 本教材**，每本 300 页）：
@@ -45,8 +47,10 @@
 | **云知声 U1**（Unisound） | **95.1** | 医疗/病历文档，字段级定位溯源，50+ 文档类型分类（99%+），极端场景（模糊、多语言） | 较新，社区实测较少，API 定价未公开 | 云端 API / 私有化部署 |
 | **GLM-OCR**（智谱 ZhipuAI） | **94.62** | 结构化文档、公式、专业术语。0.9B 参数，~1.86页/秒，API 仅 0.2元/百万 token（传统 OCR 的 1/10） | 不能提取图片，无 bbox 输出，模糊文字有幻觉 | 云端 API / VLLM 本地 |
 | **PaddleOCR VL 1.5**（百度 Baidu） | **94.5** | 手写体、表格、物理畸变图片 | CUDA 依赖地狱，逻辑重组能力弱 | 仅本地 GPU |
-| **MinerU**（OpenDataLab） | — | 排版简单的干净 PDF | 复杂版面错字多 | 仅本地 GPU |
-| **DeepSeek OCR2**（深度求索 DeepSeek） | — | 表格（信息零丢失） | 公式错误，图片丢弃 | 云端 API |
+| **MinerU 2.5**（OpenDataLab） | 90.67 | 排版简单的干净 PDF | 复杂版面错字多 | 仅本地 GPU |
+| **DeepSeek OCR**（深度求索 DeepSeek） | 87.01 | 表格（信息零丢失） | 公式错误，图片丢弃 | 云端 API |
+| **Gemini-2.5 Pro**（Google） | 88.03 | 通用大模型，OCR 能力尚可 | 非 OCR 专用，$2.50/$15.00 每百万 tokens | 云端 API |
+| **GPT-4o**（OpenAI） | 75.02 | 通用大模型 | OCR 精度低，$2.50/$10.00 每百万 tokens | 云端 API |
 
 ### 为什么用云端 API？
 

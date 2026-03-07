@@ -24,6 +24,8 @@ Batch convert documents to clean Markdown using [ZhipuAI GLM-4v-flash](https://o
 
 The [OmniDocBench v1.5](https://opendatalab.com/omnidocbench) benchmark ([GitHub](https://github.com/opendatalab/OmniDocBench)) is the most comprehensive OCR evaluation. As of early February 2026, GLM-OCR ranked **#1** in a 5-model head-to-head test (vs DeepSeek OCR2, MinerU, PaddleOCR VL, PaddleOCR VL 1.5). Around late February 2026, [Unisound U1](https://www.prnewswire.com/news-releases/unisound-u1-ocr-the-first-industrial-grade-document-intelligence-foundation-model-ushering-in-the-ocr-3-0-era-302698482.html) surpassed GLM-OCR on the leaderboard (95.1 vs 94.62), particularly excelling in medical/clinical document scenarios.
 
+For context, general-purpose VLMs score significantly lower on OmniDocBench: **GPT-4o** scores 75.02, **Gemini-2.5 Pro** 88.03, **Qwen3-VL-235B** 89.15 — specialized OCR models like GLM-OCR (0.9B params) outperform them by a wide margin at a fraction of the cost and size.
+
 ### Pricing
 
 Via [ZhipuAI special deals](https://bigmodel.cn/special_area), 50 million tokens (enough to OCR **~60 textbooks** at 300 pages each):
@@ -45,8 +47,10 @@ Standard per-token rate: ¥0.2/M tokens (~$0.03 / €0.03), roughly 1/100 the co
 | **Unisound U1** (Unisound / 云知声) | **95.1** | Medical/clinical docs, field-level positioning & traceability, 50+ doc types (99%+ classification), extreme scenarios (blurred, multilingual) | Newer, less community testing, no public API pricing yet | Cloud API / On-premise |
 | **GLM-OCR** (ZhipuAI / 智谱) | **94.62** | Structured documents, formulas, domain-specific text. 0.9B params, ~1.86 pages/sec, API ~0.2 CNY/M tokens (1/10 of traditional OCR) | Cannot extract images, no bounding box, hallucination on blurry text | Cloud API / VLLM local |
 | **PaddleOCR VL 1.5** (Baidu / 百度) | **94.5** | Handwriting, tables, distorted images | CUDA dependency hell, weak at logical restructuring | Local GPU only |
-| **MinerU** (OpenDataLab) | — | Clean PDFs with simple layout | Character errors on complex layouts | Local GPU only |
-| **DeepSeek OCR2** (DeepSeek / 深度求索) | — | Tables (zero info loss) | Formula errors, images discarded | Cloud API |
+| **MinerU 2.5** (OpenDataLab) | 90.67 | Clean PDFs with simple layout | Character errors on complex layouts | Local GPU only |
+| **DeepSeek OCR** (DeepSeek / 深度求索) | 87.01 | Tables (zero info loss) | Formula errors, images discarded | Cloud API |
+| **Gemini-2.5 Pro** (Google) | 88.03 | General-purpose VLM with decent OCR | Not OCR-specialized, $2.50/$15.00 per M tokens | Cloud API |
+| **GPT-4o** (OpenAI) | 75.02 | General-purpose VLM | Poor OCR accuracy, $2.50/$10.00 per M tokens | Cloud API |
 
 ### Why Cloud API?
 
