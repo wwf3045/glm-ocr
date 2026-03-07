@@ -87,6 +87,13 @@ Removes common OCR artifacts (background images ~3.2MB, icons <3KB) and cleans u
 | `IMAGE_SEGMENT_HEIGHT` | 4000px | Max height per segment for long images |
 | `IMAGE_OVERLAP` | 200px | Overlap between adjacent image segments |
 
+## Use Cases
+
+- Convert lecture slides / textbooks to Markdown for note-taking and RAG knowledge bases
+- **WeChat chat export via screenshots**: taking long screenshots is a safer alternative to third-party export tools (no API abuse, no risk of ToS violations). OCR the screenshots into text, then feed to AI for personal assistant training
+- Batch digitize scanned documents
+- Extract text from web page screenshots
+
 ## Requirements
 
 - Python 3.8+

@@ -87,6 +87,13 @@ python clean_junk_images.py
 | `IMAGE_SEGMENT_HEIGHT` | 4000px | 长图每段最大高度 |
 | `IMAGE_OVERLAP` | 200px | 相邻段重叠像素 |
 
+## 使用场景
+
+- 课件/教材转 Markdown，用于笔记整理和 RAG 知识库构建
+- **微信聊天记录导出**：通过长截图导出聊天记录，比第三方导出工具风险更小（不调用私有 API，不易触发平台风控）。OCR 后的文本可用于训练 AI 个人助手
+- 批量数字化扫描文档
+- 网页截图文字提取
+
 ## 环境要求
 
 - Python 3.8+
