@@ -12,6 +12,7 @@ Batch convert documents to clean Markdown using [ZhipuAI GLM-4v-flash](https://o
 - **Image extraction**: embedded images are saved to `images/` subfolder
 - **Junk image cleaner**: removes common artifacts (background images, tiny icons) from OCR output
 - **Math formula support**: LaTeX output (`$...$` inline, `$$...$$` block)
+- **AI coding assistant support**: includes `CLAUDE.md` and `AGENTS.md` for Claude Code, Codex, OpenCode, and OpenClaw
 
 ## Use Cases
 

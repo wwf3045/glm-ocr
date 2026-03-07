@@ -12,6 +12,7 @@
 - **图片提取**：内嵌图片自动保存到 `images/` 子目录
 - **垃圾图片清理**：自动删除 OCR 产生的常见垃圾图（背景图、小图标）
 - **数学公式支持**：LaTeX 输出（行内 `$...$`，独立公式 `$$...$$`）
+- **AI 编程助手支持**：内置 `CLAUDE.md` 和 `AGENTS.md`，兼容 Claude Code、Codex、OpenCode、OpenClaw
 
 ## 使用场景
 
