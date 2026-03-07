@@ -1,0 +1,6 @@
+input/
+output/
+.env
+__pycache__/
+*.pyc
+_tmp_segment_*

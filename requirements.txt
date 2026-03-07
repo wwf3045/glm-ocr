@@ -1,0 +1,4 @@
+zhipuai
+PyMuPDF
+python-dotenv
+Pillow
