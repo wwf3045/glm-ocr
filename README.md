@@ -4,6 +4,15 @@ English | [简体中文](README_CN.md)
 
 Batch convert PDF / PPT / images to Markdown using [ZhipuAI GLM-4v-flash](https://open.bigmodel.cn/) API. Outputs clean Markdown with LaTeX math formulas.
 
+## Features
+
+- **PDF / PPT / PPTX -> Markdown**: segment-based OCR with automatic fallback (file upload -> per-page image)
+- **Long screenshot support**: auto-splits tall images (e.g. chat screenshots) into overlapping segments (text OCR only, no image extraction)
+- **Resume from breakpoint**: already-completed segments are skipped on re-run
+- **Image extraction**: embedded images are saved to `images/` subfolder
+- **Junk image cleaner**: removes common artifacts (background images, tiny icons) from OCR output
+- **Math formula support**: LaTeX output (`$...$` inline, `$$...$$` block)
+
 ## Why GLM?
 
 The [OmniDocBench v1.5](https://github.com/opendatalab/OmniDocBench) benchmark is the most comprehensive OCR evaluation. As of early 2026, GLM-OCR ranked **#1** in a 5-model head-to-head test (vs DeepSeek OCR2, MinerU, PaddleOCR VL, PaddleOCR VL 1.5). The benchmark is actively updated — newer models like [Unisound U1](https://www.prnewswire.com/news-releases/unisound-u1-ocr-the-first-industrial-grade-document-intelligence-foundation-model-ushering-in-the-ocr-3-0-era-302698482.html) (strong in medical/clinical documents) are emerging.
@@ -63,15 +72,6 @@ The script architecture is model-agnostic — swapping to a different API (DeepS
 > - [OCR model selection guide (2026.02)](https://www.bilibili.com/video/BV1GYF7z9E7n/) by [@从零开始学AI](https://space.bilibili.com/91394217)
 > - [OmniDocBench v1.5 benchmark](https://github.com/opendatalab/OmniDocBench)
 > - [Unisound U1 OCR announcement](https://www.bilibili.com/video/BV1rqAUzAE4z/)
-
-## Features
-
-- **PDF / PPT / PPTX -> Markdown**: segment-based OCR with automatic fallback (file upload -> per-page image)
-- **Long screenshot support**: auto-splits tall images (e.g. chat screenshots) into overlapping segments (text OCR only, no image extraction)
-- **Resume from breakpoint**: already-completed segments are skipped on re-run
-- **Image extraction**: embedded images are saved to `images/` subfolder
-- **Junk image cleaner**: removes common artifacts (background images, tiny icons) from OCR output
-- **Math formula support**: LaTeX output (`$...$` inline, `$$...$$` block)
 
 ## Quick Start
 

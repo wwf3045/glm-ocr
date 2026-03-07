@@ -4,6 +4,15 @@
 
 使用[智谱 GLM-4v-flash](https://open.bigmodel.cn/) API 批量将 PDF / PPT / 图片转换为 Markdown。输出干净的 Markdown 格式，支持 LaTeX 数学公式。
 
+## 功能特点
+
+- **PDF / PPT / PPTX -> Markdown**：分段 OCR，自动回退（文件上传 -> 逐页图片）
+- **长截图支持**：自动切分超长图片（如微信聊天记录截图），重叠分段避免截断（仅文字 OCR，不提取图片）
+- **断点续传**：已完成的段落不会重复处理，中断后再次运行即可继续
+- **图片提取**：内嵌图片自动保存到 `images/` 子目录
+- **垃圾图片清理**：自动删除 OCR 产生的常见垃圾图（背景图、小图标）
+- **数学公式支持**：LaTeX 输出（行内 `$...$`，独立公式 `$$...$$`）
+
 ## 为什么选择 GLM？
 
 [OmniDocBench v1.5](https://github.com/opendatalab/OmniDocBench) 是目前最全面的 OCR 评测基准。截至 2026 年初，GLM-OCR 在 5 模型对比测试中综合排名**第一**（vs DeepSeek OCR2、MinerU、PaddleOCR VL、PaddleOCR VL 1.5）。榜单持续更新中——[云知声 U1](https://www.bilibili.com/video/BV1rqAUzAE4z/)（医疗/病历场景强）等新模型也在崭露头角。
@@ -63,15 +72,6 @@
 > - [OCR 模型选型指南（2026.02）](https://www.bilibili.com/video/BV1GYF7z9E7n/) by [@从零开始学AI](https://space.bilibili.com/91394217)
 > - [OmniDocBench v1.5 榜单](https://github.com/opendatalab/OmniDocBench)
 > - [云知声 U1 OCR 发布](https://www.bilibili.com/video/BV1rqAUzAE4z/)
-
-## 功能特点
-
-- **PDF / PPT / PPTX -> Markdown**：分段 OCR，自动回退（文件上传 -> 逐页图片）
-- **长截图支持**：自动切分超长图片（如微信聊天记录截图），重叠分段避免截断（仅文字 OCR，不提取图片）
-- **断点续传**：已完成的段落不会重复处理，中断后再次运行即可继续
-- **图片提取**：内嵌图片自动保存到 `images/` 子目录
-- **垃圾图片清理**：自动删除 OCR 产生的常见垃圾图（背景图、小图标）
-- **数学公式支持**：LaTeX 输出（行内 `$...$`，独立公式 `$$...$$`）
 
 ## 快速开始
 
