@@ -7,7 +7,7 @@ Batch convert documents to clean Markdown using [ZhipuAI GLM-OCR](https://open.b
 ## Features
 
 - **PDF / PPT / PPTX -> Markdown**: segment-based OCR with automatic fallback (file upload -> per-page image)
-- **Concurrent processing**: process multiple segments in parallel (configurable `MAX_WORKERS`, default 2)
+- **Concurrent processing**: when a file has multiple segments, processes 2 segments in parallel (GLM-OCR API max concurrency is 2)
 - **Long screenshot support**: auto-splits tall images (e.g. chat screenshots) into overlapping segments (text OCR only, no image extraction)
 - **Resume from breakpoint**: already-completed segments are skipped on re-run
 - **Image extraction**: embedded images are saved to `images/` subfolder
@@ -121,7 +121,7 @@ Removes common OCR artifacts (background images ~3.2MB, icons <3KB) and cleans u
 |-----------|---------|-------------|
 | `PAGES_PER_MD_PDF` | 20 | Pages per segment for PDF |
 | `PAGES_PER_MD_PPT` | 50 | Pages per segment for PPT |
-| `MAX_WORKERS` | 2 | Max concurrent API calls |
+| `MAX_WORKERS` | 2 | Max concurrent API calls (GLM-OCR API limit is 2) |
 | `IMAGE_SEGMENT_HEIGHT` | 4000px | Max height per segment for long images |
 | `IMAGE_OVERLAP` | 200px | Overlap between adjacent image segments |
 

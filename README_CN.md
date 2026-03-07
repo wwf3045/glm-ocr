@@ -7,7 +7,7 @@
 ## 功能特点
 
 - **PDF / PPT / PPTX -> Markdown**：分段 OCR，自动回退（文件上传 -> 逐页图片）
-- **并发处理**：多段并行 OCR，可配置 `MAX_WORKERS`（默认 2 路并发）
+- **并发处理**：当文件有多个分段时，2 段并行 OCR（GLM-OCR API 最大并发数为 2）
 - **长截图支持**：自动切分超长图片（如微信聊天记录截图），重叠分段避免截断（仅文字 OCR，不提取图片）
 - **断点续传**：已完成的段落不会重复处理，中断后再次运行即可继续
 - **图片提取**：内嵌图片自动保存到 `images/` 子目录
@@ -121,7 +121,7 @@ python clean_junk_images.py
 |------|--------|------|
 | `PAGES_PER_MD_PDF` | 20 | PDF 每段页数 |
 | `PAGES_PER_MD_PPT` | 50 | PPT 每段页数 |
-| `MAX_WORKERS` | 2 | API 最大并发数 |
+| `MAX_WORKERS` | 2 | API 最大并发数（GLM-OCR API 限制为 2） |
 | `IMAGE_SEGMENT_HEIGHT` | 4000px | 长图每段最大高度 |
 | `IMAGE_OVERLAP` | 200px | 相邻段重叠像素 |
 
