@@ -1,8 +1,8 @@
 [English](README.md) | 简体中文
 
-# GLM-OCR
+# GLM-OCR — PDF/PPT/图片转Markdown OCR工具
 
-使用[智谱 GLM-4v-flash](https://open.bigmodel.cn/) API 批量将 PDF / PPT / 图片转换为 Markdown。输出干净的 Markdown 格式，支持 LaTeX 数学公式。
+使用[智谱 GLM-4v-flash](https://open.bigmodel.cn/) API 批量将文档转换为干净的 Markdown —— 2026 年初 [OmniDocBench v1.5 榜首模型](https://opendatalab.com/omnidocbench)。零 GPU 要求，支持 LaTeX 公式，断点续传。
 
 ## 功能特点
 

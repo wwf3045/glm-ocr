@@ -1,8 +1,8 @@
 English | [简体中文](README_CN.md)
 
-# GLM-OCR
+# GLM-OCR — PDF/PPT/Image to Markdown OCR Converter
 
-Batch convert PDF / PPT / images to Markdown using [ZhipuAI GLM-4v-flash](https://open.bigmodel.cn/) API. Outputs clean Markdown with LaTeX math formulas.
+Batch convert documents to clean Markdown using [ZhipuAI GLM-4v-flash](https://open.bigmodel.cn/) API — the [#1 OCR model on OmniDocBench v1.5](https://opendatalab.com/omnidocbench) as of early 2026. Zero GPU required, LaTeX math support, resume from breakpoint.
 
 ## Features
 
