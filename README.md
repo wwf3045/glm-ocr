@@ -77,11 +77,27 @@ Removes common OCR artifacts (background images ~3.2MB, icons <3KB) and cleans u
 - [ZhipuAI API key](https://open.bigmodel.cn/) (GLM-4v-flash is free-tier)
 - LibreOffice (only for PPT/PPTX conversion)
 
-## Notes
+## Why GLM?
 
-- GLM-4v-flash is weak on handwritten content. Use Claude or GPT for handwriting OCR.
-- PPT/PPTX files are first converted to PDF via LibreOffice before OCR.
-- Source files are automatically deleted from `input/` after successful processing.
+As of early 2026, ZhipuAI's GLM-OCR is the **top-performing model for structured document OCR** ([OmniDocBench v1.5](https://github.com/opendatalab/OmniDocBench)), especially for converting PDF to Markdown. Here's how it compares:
+
+| Solution | Strengths | Weaknesses |
+|----------|-----------|------------|
+| **GLM-OCR** | Best Markdown structure output, semantic understanding of cross-page tables and complex layouts, ~2 pages/sec, low VRAM (2-3GB), VLLM acceleration | Hallucination on blurry text (guesses plausible values instead of returning garbage), weak on distorted/crumpled paper |
+| **PaddleOCR v1.5** | Best for physically distorted images (receipts, crumpled paper, skewed photos), pixel-level precision | Deployment nightmare (CUDA conflicts, dependency hell), weak at logical document restructuring |
+| **MinerU** | Good open-source document parser | Requires local GPU deployment, heavy dependencies |
+
+**Bottom line**: If your input is clean digital documents (PDF, PPT, screenshots), GLM-OCR produces the cleanest Markdown output with minimal post-processing — ideal for RAG knowledge bases and study notes. For physically damaged or handwritten documents, consider PaddleOCR or Claude/GPT.
+
+> Reference: [OCR model comparison (2026.02)](https://www.bilibili.com/video/BV1GYF7z9E7n/) by [@从零开始学AI](https://space.bilibili.com/91394217)
+
+## Known Limitations
+
+- **Hallucination**: GLM may guess plausible values for blurry text instead of returning errors — avoid for financial/medical documents requiring exact precision
+- **Repetition bug**: Occasionally loops on dense Excel screenshots, repeating the same row
+- **Handwriting**: Weak on handwritten content — use Claude or GPT instead
+- PPT/PPTX files are first converted to PDF via LibreOffice before OCR
+- Source files are automatically deleted from `input/` after successful processing
 
 ## License
 

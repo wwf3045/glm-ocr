@@ -77,9 +77,25 @@ python clean_junk_images.py
 - [智谱 API Key](https://open.bigmodel.cn/)（GLM-4v-flash 为免费模型）
 - LibreOffice（仅 PPT/PPTX 转换需要）
 
-## 注意事项
+## 为什么选择 GLM？
 
-- GLM-4v-flash 对手写内容识别较差，手写场景建议用 Claude 或 GPT
+截至 2026 年初，智谱 GLM-OCR 是**结构化文档 OCR 的综合最优解**（[OmniDocBench v1.5](https://github.com/opendatalab/OmniDocBench) 榜单），尤其擅长 PDF 转 Markdown。与同类方案对比：
+
+| 方案 | 优势 | 劣势 |
+|------|------|------|
+| **GLM-OCR** | Markdown 结构输出最佳，语义理解跨页表格和复杂排版，~2页/秒，显存仅需 2-3GB，支持 VLLM 加速 | 模糊文字会脑补（幻觉），不适合扭曲/褶皱纸张 |
+| **PaddleOCR v1.5** | 物理畸变场景最强（小票、褶皱、侧拍），像素级精度 | 部署地狱（CUDA 冲突、依赖报错），逻辑重组能力弱 |
+| **MinerU** | 不错的开源文档解析器 | 需要本地 GPU 部署，依赖重 |
+
+**结论**：如果输入是干净的数字文档（PDF、PPT、截图），GLM-OCR 输出的 Markdown 结构最干净，几乎不需要二次清洗——非常适合 RAG 知识库构建和学习笔记整理。如果是物理损坏或手写文档，建议用 PaddleOCR 或 Claude/GPT。
+
+> 参考：[OCR 模型横评（2026.02）](https://www.bilibili.com/video/BV1GYF7z9E7n/) by [@从零开始学AI](https://space.bilibili.com/91394217)
+
+## 已知局限
+
+- **幻觉问题**：GLM 对模糊文字会猜测合理值而非报错——财务/医疗等需要绝对精度的场景慎用
+- **复读 bug**：处理极度密集的 Excel 截图时偶尔会循环输出同一行
+- **手写识别差**：手写场景建议用 Claude 或 GPT
 - PPT/PPTX 文件会先通过 LibreOffice 转为 PDF 再处理
 - 处理成功后，源文件会自动从 `input/` 中删除
 
