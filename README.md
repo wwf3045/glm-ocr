@@ -4,10 +4,26 @@ English | [简体中文](README_CN.md)
 
 Batch convert PDF / PPT / images to Markdown using [ZhipuAI GLM-4v-flash](https://open.bigmodel.cn/) API. Outputs clean Markdown with LaTeX math formulas.
 
+## Why GLM?
+
+As of early 2026, ZhipuAI's GLM-OCR is the **top-performing model for structured document OCR** ([OmniDocBench v1.5](https://github.com/opendatalab/OmniDocBench)), especially for converting PDF to Markdown. Here's how it compares:
+
+| Solution | Strengths | Weaknesses |
+|----------|-----------|------------|
+| **GLM-OCR** | Best Markdown structure output, semantic understanding of cross-page tables and complex layouts, ~2 pages/sec, low VRAM (2-3GB), VLLM acceleration | Hallucination on blurry text (guesses plausible values instead of returning garbage), weak on distorted/crumpled paper |
+| **PaddleOCR v1.5** | Best for physically distorted images (receipts, crumpled paper, skewed photos), pixel-level precision | Deployment nightmare (CUDA conflicts, dependency hell), weak at logical document restructuring |
+| **MinerU** | Good open-source document parser | Requires local GPU deployment, heavy dependencies |
+
+**Why cloud API instead of local models?** This project is designed for **individual users** (students, researchers) who don't need to process thousands of documents. Cloud API means zero GPU requirements, no CUDA setup, no model downloads — just `pip install` and go. Local deployment (PaddleOCR, MinerU) only makes sense for enterprises with dedicated GPU servers and massive batch processing needs.
+
+**Bottom line**: If your input is clean digital documents (PDF, PPT, screenshots), GLM-OCR produces the cleanest Markdown output with minimal post-processing — ideal for RAG knowledge bases and study notes. For physically damaged or handwritten documents, consider PaddleOCR or Claude/GPT.
+
+> Reference: [OCR model comparison (2026.02)](https://www.bilibili.com/video/BV1GYF7z9E7n/) by [@从零开始学AI](https://space.bilibili.com/91394217)
+
 ## Features
 
 - **PDF / PPT / PPTX -> Markdown**: segment-based OCR with automatic fallback (file upload -> per-page image)
-- **Long screenshot support**: auto-splits tall images (e.g. chat screenshots) into overlapping segments
+- **Long screenshot support**: auto-splits tall images (e.g. chat screenshots) into overlapping segments (text OCR only, no image extraction)
 - **Resume from breakpoint**: already-completed segments are skipped on re-run
 - **Image extraction**: embedded images are saved to `images/` subfolder
 - **Junk image cleaner**: removes common artifacts (background images, tiny icons) from OCR output
@@ -76,22 +92,6 @@ Removes common OCR artifacts (background images ~3.2MB, icons <3KB) and cleans u
 - Python 3.8+
 - [ZhipuAI API key](https://open.bigmodel.cn/) (GLM-4v-flash is free-tier)
 - LibreOffice (only for PPT/PPTX conversion)
-
-## Why GLM?
-
-As of early 2026, ZhipuAI's GLM-OCR is the **top-performing model for structured document OCR** ([OmniDocBench v1.5](https://github.com/opendatalab/OmniDocBench)), especially for converting PDF to Markdown. Here's how it compares:
-
-| Solution | Strengths | Weaknesses |
-|----------|-----------|------------|
-| **GLM-OCR** | Best Markdown structure output, semantic understanding of cross-page tables and complex layouts, ~2 pages/sec, low VRAM (2-3GB), VLLM acceleration | Hallucination on blurry text (guesses plausible values instead of returning garbage), weak on distorted/crumpled paper |
-| **PaddleOCR v1.5** | Best for physically distorted images (receipts, crumpled paper, skewed photos), pixel-level precision | Deployment nightmare (CUDA conflicts, dependency hell), weak at logical document restructuring |
-| **MinerU** | Good open-source document parser | Requires local GPU deployment, heavy dependencies |
-
-**Why cloud API instead of local models?** This project is designed for **individual users** (students, researchers) who don't need to process thousands of documents. Cloud API means zero GPU requirements, no CUDA setup, no model downloads — just `pip install` and go. Local deployment (PaddleOCR, MinerU) only makes sense for enterprises with dedicated GPU servers and massive batch processing needs.
-
-**Bottom line**: If your input is clean digital documents (PDF, PPT, screenshots), GLM-OCR produces the cleanest Markdown output with minimal post-processing — ideal for RAG knowledge bases and study notes. For physically damaged or handwritten documents, consider PaddleOCR or Claude/GPT.
-
-> Reference: [OCR model comparison (2026.02)](https://www.bilibili.com/video/BV1GYF7z9E7n/) by [@从零开始学AI](https://space.bilibili.com/91394217)
 
 ## Known Limitations
 
