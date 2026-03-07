@@ -6,19 +6,63 @@
 
 ## 为什么选择 GLM？
 
-截至 2026 年初，智谱 GLM-OCR 是**结构化文档 OCR 的综合最优解**（[OmniDocBench v1.5](https://github.com/opendatalab/OmniDocBench) 榜单），尤其擅长 PDF 转 Markdown。与同类方案对比：
+[OmniDocBench v1.5](https://github.com/opendatalab/OmniDocBench) 是目前最全面的 OCR 评测基准。截至 2026 年初，GLM-OCR 在 5 模型对比测试中综合排名**第一**（vs DeepSeek OCR2、MinerU、PaddleOCR VL、PaddleOCR VL 1.5）。榜单持续更新中——[云知声 U1](https://www.bilibili.com/video/BV1rqAUzAE4z/)（医疗/病历场景强）等新模型也在崭露头角。
 
-| 方案 | 优势 | 劣势 |
-|------|------|------|
-| **GLM-OCR** | Markdown 结构输出最佳，语义理解跨页表格和复杂排版，~2页/秒，显存仅需 2-3GB，支持 VLLM 加速 | 模糊文字会脑补（幻觉），不适合扭曲/褶皱纸张 |
-| **PaddleOCR v1.5** | 物理畸变场景最强（小票、褶皱、侧拍），像素级精度 | 部署地狱（CUDA 冲突、依赖报错），逻辑重组能力弱 |
-| **MinerU** | 不错的开源文档解析器 | 需要本地 GPU 部署，依赖重 |
+### 评测实测结果
 
-**为什么用云端 API 而不是本地模型？** 本项目面向**个人用户**（学生、研究者），不需要处理成千上万份文档。云端 API 意味着零 GPU 要求、不用配 CUDA、不用下载模型——`pip install` 即可使用。本地部署（PaddleOCR、MinerU）只适合有专用 GPU 服务器和大批量处理需求的企业场景。
+**测试 1 — 公式密集 PDF（大量数学公式）**：
+| 模型 | 结果 |
+|------|------|
+| GLM-OCR | 公式层级完美还原，版面完整，章节标题全保留 |
+| PaddleOCR VL 1.5 | 零错误，LaTeX 等效写法 |
+| MinerU | 文字零错误，LaTeX 结构完整 |
+| DeepSeek OCR2 | 公式符号丢失，内容缺失 |
 
-**结论**：如果输入是干净的数字文档（PDF、PPT、截图），GLM-OCR 输出的 Markdown 结构最干净，几乎不需要二次清洗——非常适合 RAG 知识库构建和学习笔记整理。如果是物理损坏或手写文档，建议用 PaddleOCR 或 Claude/GPT。
+**测试 2 — 复杂杂志排版（图片、模糊字体、混合版面）**：
+| 模型 | 结果 |
+|------|------|
+| GLM-OCR | 唯一正确识别所有生物专业术语（血蓝蛋白、铜离子等） |
+| PaddleOCR VL 1.5 | 接近正确，但专业术语有误 |
+| MinerU | 大量错字（阳光→目光、植物激素→植被激素、铜离子→阴离子） |
+| DeepSeek OCR2 | 文字基本正确，但图片丢弃、页码丢失 |
 
-> 参考：[OCR 模型横评（2026.02）](https://www.bilibili.com/video/BV1GYF7z9E7n/) by [@从零开始学AI](https://space.bilibili.com/91394217)
+**测试 3 — 竖版手写中文书法（苏轼《江城子》）**：
+| 模型 | 结果 |
+|------|------|
+| PaddleOCR VL | 零错误，全文十句完整无误 |
+| GLM-OCR | 竖排顺序正确，整体稳健，但漏掉一个"话"字 |
+| MinerU | 顺序正确但书法字形识别薄弱 |
+| DeepSeek OCR2 | 阅读顺序完全颠倒 |
+
+**测试 4 — 复杂手写表格（复选框、手写数字）**：
+| 模型 | 结果 |
+|------|------|
+| PaddleOCR VL 1.5 | 最佳——手写数字全对、复选框精准识别、结构最清晰 |
+| GLM-OCR | 手写数字全部正确，表格格式正确，但表头信息全丢、复选框遗漏 |
+| MinerU | 表格识别完全错误 |
+| DeepSeek OCR2 | 信息零丢失，但表头与数据分离 |
+
+### 方案对比总结
+
+| 方案 | 最适合 | 劣势 | 部署方式 |
+|------|--------|------|----------|
+| **GLM-OCR** | 结构化文档、公式、专业术语。0.9B 参数，~1.86页/秒，API 仅 0.2元/百万 token（传统 OCR 的 1/10） | 不能提取图片，无 bbox 输出，模糊文字有幻觉 | 云端 API / VLLM 本地 |
+| **PaddleOCR VL 1.5** | 手写体、表格、物理畸变图片 | CUDA 依赖地狱，逻辑重组能力弱 | 仅本地 GPU |
+| **MinerU** | 排版简单的干净 PDF | 复杂版面错字多 | 仅本地 GPU |
+| **DeepSeek OCR2** | 表格（信息零丢失） | 公式错误，图片丢弃 | 云端 API |
+| **云知声 U1** | 医疗/病历文档，字段级定位溯源 | 较新，社区实测较少 | 云端 API |
+
+### 为什么用云端 API？
+
+本项目面向**个人用户**（学生、研究者），不需要处理成千上万份文档。云端 API 意味着零 GPU 要求、不用配 CUDA、不用下载模型——`pip install` 即可使用。本地部署只适合有专用 GPU 服务器的企业场景。
+
+脚本架构与模型解耦——切换到其他 API（DeepSeek、云知声 U1 等）只需修改 `ocr.py` 中的 API 客户端和模型名称。
+
+> 参考：
+> - [5 模型 OCR 实测对比（2026.02）](https://www.bilibili.com/video/BV1UjFjz1EdD/) by [@AI创客空间](https://space.bilibili.com/396997624)
+> - [OCR 模型选型指南（2026.02）](https://www.bilibili.com/video/BV1GYF7z9E7n/) by [@从零开始学AI](https://space.bilibili.com/91394217)
+> - [OmniDocBench v1.5 榜单](https://github.com/opendatalab/OmniDocBench)
+> - [云知声 U1 OCR 发布](https://www.bilibili.com/video/BV1rqAUzAE4z/)
 
 ## 功能特点
 
