@@ -7,6 +7,7 @@ Batch convert documents to clean Markdown using [ZhipuAI GLM-OCR](https://open.b
 ## Features
 
 - **PDF / PPT / PPTX -> Markdown**: segment-based OCR with automatic fallback (file upload -> per-page image)
+- **Handwriting recognition**: `--handwrite` mode uses ZhipuAI handwriting OCR API for handwritten content
 - **Concurrent processing**: when a file has multiple segments, processes 2 segments in parallel (GLM-OCR API max concurrency is 2)
 - **Long screenshot support**: auto-splits tall images (e.g. chat screenshots) into overlapping segments (text OCR only, no image extraction)
 - **Resume from breakpoint**: already-completed segments are skipped on re-run
@@ -90,7 +91,8 @@ GLM_API_KEY=your_api_key_here
 
 ```bash
 # Put PDF/PPT/images in input/ directory
-python ocr.py
+python ocr.py               # Standard OCR (printed text, formulas, etc.)
+python ocr.py --handwrite   # Handwriting recognition mode
 # Markdown output in output/
 ```
 
@@ -135,7 +137,7 @@ Removes common OCR artifacts (background images ~3.2MB, icons <3KB) and cleans u
 
 - **Hallucination**: GLM may guess plausible values for blurry text instead of returning errors — avoid for financial/medical documents requiring exact precision
 - **Repetition bug**: Occasionally loops on dense Excel screenshots, repeating the same row
-- **Handwriting**: Weak on handwritten content — use Claude or GPT instead
+- **Handwriting**: Standard mode is weak on handwritten content — use `--handwrite` mode for handwritten text (or Claude/GPT for best quality). Handwriting mode outputs plain text only (no Markdown formatting), supports images only (PDFs are auto-converted to images), ¥0.01/page
 - PPT/PPTX files are converted to PDF in a background thread (parallel with OCR), using a single reusable PowerPoint COM instance
 - Source files in `input/` are preserved after processing
 

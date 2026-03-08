@@ -13,6 +13,7 @@ GLM-OCR 批量文档识别脚本
 - 失败自动重试 3 次
 """
 
+import argparse
 import base64
 import io
 import os
@@ -33,7 +34,7 @@ if sys.platform == "win32":
 import fitz  # PyMuPDF
 from PIL import Image
 from dotenv import load_dotenv
-from zai import ZaiClient
+from zai import ZaiClient, ZhipuAiClient
 
 # ============================================================
 # 配置
@@ -408,6 +409,116 @@ def process_long_image(client: ZaiClient, file_path: Path, book_dir: Path):
 
 
 # ============================================================
+# 手写识别（ZhipuAiClient.ocr.handwriting_ocr）
+# ============================================================
+
+def call_handwrite_ocr(client: ZhipuAiClient, img_bytes: bytes) -> str:
+    """调用手写识别 API，返回纯文本（每行一个 words），带重试"""
+    for attempt in range(1, RETRY_TIMES + 1):
+        try:
+            resp = client.ocr.handwriting_ocr(
+                file=img_bytes,
+                tool_type="hand_write",
+            )
+            if not resp.words_result:
+                return ""
+            return "\n".join(wr.words for wr in resp.words_result)
+        except Exception as e:
+            _tprint(f"    [!] 第 {attempt} 次调用失败: {e}")
+            if attempt < RETRY_TIMES:
+                time.sleep(RETRY_DELAY)
+            else:
+                _tprint(f"    [x] 已达最大重试次数，跳过")
+                return ""
+
+
+def process_handwrite_image(client: ZhipuAiClient, img_path: Path, book_dir: Path):
+    """手写识别：处理单张图片"""
+    md_path = book_dir / f"{img_path.stem}.md"
+    if md_path.exists():
+        print(f"  [跳过] 已存在: {md_path.name}")
+        return
+
+    print(f"  调用手写识别 API...")
+    with open(str(img_path), "rb") as f:
+        img_bytes = f.read()
+    text = call_handwrite_ocr(client, img_bytes)
+    md_path.write_text(text, encoding="utf-8")
+    print(f"  [ok] 完成 -> {md_path.name}")
+
+
+def process_handwrite_pdf(client: ZhipuAiClient, pdf_path: Path, book_dir: Path,
+                          pages_per_md: int = None):
+    """手写识别：处理 PDF（逐页转图片后识别）"""
+    if pages_per_md is None:
+        pages_per_md = PAGES_PER_MD_PDF
+
+    doc = fitz.open(str(pdf_path))
+    total_pages = len(doc)
+    doc.close()
+
+    total_segments = -(-total_pages // pages_per_md)
+    print(f"  共 {total_pages} 页，将输出 {total_segments} 个 .md 文件")
+
+    zoom = FALLBACK_DPI / 72
+    matrix = fitz.Matrix(zoom, zoom)
+
+    for seg_idx in range(total_segments):
+        seg_start = seg_idx * pages_per_md
+        seg_end = min(seg_start + pages_per_md, total_pages)
+        page_label = f"{seg_start+1:04d}-{seg_end:04d}"
+        md_filename = f"{clean_name(pdf_path.stem)}_{page_label}.md"
+        md_path = book_dir / md_filename
+
+        if md_path.exists():
+            print(f"  [{seg_start+1}-{seg_end}] 已完成，跳过")
+            continue
+
+        print(f"  [{seg_start+1}-{seg_end}] 逐页手写识别...", flush=True)
+        doc = fitz.open(str(pdf_path))
+        page_texts = []
+        for page_idx in range(seg_start, seg_end):
+            pix = doc[page_idx].get_pixmap(matrix=matrix)
+            img_bytes = pix.tobytes("png")
+            print(f"    第 {page_idx+1} 页...", flush=True)
+            text = call_handwrite_ocr(client, img_bytes)
+            if text:
+                page_texts.append(f"<!-- 第{page_idx+1}页 -->\n\n{text}")
+            else:
+                page_texts.append(f"<!-- 第{page_idx+1}页：识别为空 -->")
+        doc.close()
+
+        header = f"<!-- PDF页码: {seg_start+1}-{seg_end} | 文件: {pdf_path.name} | 模式: 手写识别 -->\n\n"
+        md_path.write_text(header + "\n\n".join(page_texts), encoding="utf-8")
+        print(f"    -> {md_filename}")
+
+    print(f"  [ok] 手写识别完成")
+
+
+def process_handwrite_file(client: ZhipuAiClient, file_path: Path):
+    """手写识别模式：处理单个文件"""
+    book_dir = OUTPUT_DIR / clean_name(file_path.stem)
+    book_dir.mkdir(parents=True, exist_ok=True)
+    ext = file_path.suffix.lower()
+
+    if ext in (".pptx", ".ppt"):
+        pdf_path = book_dir / f"{file_path.stem}.pdf"
+        if not pdf_path.exists():
+            print(f"  转换 PPT -> PDF...", flush=True)
+            if not convert_ppt_to_pdf(str(file_path), str(pdf_path)):
+                return
+            print(f"  转换完成")
+        process_handwrite_pdf(client, pdf_path, book_dir,
+                              pages_per_md=PAGES_PER_MD_PPT)
+    elif ext == ".pdf":
+        process_handwrite_pdf(client, file_path, book_dir)
+    elif ext in IMAGE_EXTENSIONS:
+        process_handwrite_image(client, file_path, book_dir)
+    else:
+        print(f"  [!] 不支持的文件格式: {ext}")
+
+
+# ============================================================
 # 处理 PDF（支持并发）
 # ============================================================
 
@@ -615,12 +726,25 @@ def _batch_convert_ppts(ppt_files: list, converted_queue: queue.Queue,
 
 
 def main():
+    parser = argparse.ArgumentParser(description="GLM-OCR 批量文档识别")
+    parser.add_argument("--handwrite", action="store_true",
+                        help="使用手写识别模式（ZhipuAI handwriting_ocr）")
+    args = parser.parse_args()
+
     check_config()
     INPUT_DIR.mkdir(exist_ok=True)
     OUTPUT_DIR.mkdir(exist_ok=True)
 
-    client = ZaiClient(api_key=API_KEY)
-    print(f"[ok] API 客户端已初始化")
+    mode = "手写识别" if args.handwrite else "GLM-OCR"
+
+    if args.handwrite:
+        hw_client = ZhipuAiClient(api_key=API_KEY)
+        print(f"[ok] 手写识别客户端已初始化（ZhipuAiClient）")
+    else:
+        client = ZaiClient(api_key=API_KEY)
+        print(f"[ok] API 客户端已初始化")
+
+    print(f"[ok] 模式: {mode}")
     print(f"[ok] 输入文件夹: {INPUT_DIR}")
     print(f"[ok] 输出文件夹: {OUTPUT_DIR}")
     print(f"[ok] PDF 每 {PAGES_PER_MD_PDF} 页一个 .md, PPT 每 {PAGES_PER_MD_PPT} 页一个 .md")
@@ -652,6 +776,46 @@ def main():
         print(f"\n[!] input 文件夹为空，请将 PDF/PPT/图片 放入: {INPUT_DIR}")
         return
 
+    total = len(files)
+
+    # ---- 手写识别模式：简单顺序处理 ----
+    if args.handwrite:
+        print(f"\n找到 {total} 个文件:")
+        for f in files:
+            print(f"  - {f.name}")
+
+        print(f"\n{'='*50}")
+        print("开始手写识别")
+        print(f"{'='*50}\n")
+
+        success, failed = 0, 0
+        start_time = time.time()
+
+        for i, file_path in enumerate(files, 1):
+            print(f"[{i}/{total}] {file_path.name}")
+            try:
+                process_handwrite_file(hw_client, file_path)
+                success += 1
+            except Exception as e:
+                print(f"  [x] 处理失败: {e}")
+                failed += 1
+            print()
+
+        elapsed = time.time() - start_time
+        minutes, seconds = int(elapsed // 60), int(elapsed % 60)
+
+        print(f"{'='*50}")
+        print(f"手写识别完毕!")
+        print(f"  成功: {success}")
+        if failed:
+            print(f"  失败: {failed}")
+        print(f"  耗时: {minutes}分{seconds}秒")
+        print(f"  输出: {OUTPUT_DIR}")
+        print(f"{'='*50}")
+        return
+
+    # ---- 标准 GLM-OCR 模式 ----
+
     # 分离：可直接 OCR 的文件 vs 需要先转 PDF 的 PPT 文件
     ready_files = []
     ppt_files = []
@@ -661,7 +825,6 @@ def main():
         else:
             ready_files.append(f)
 
-    total = len(files)
     print(f"\n找到 {total} 个文件（{len(ready_files)} 个可直接 OCR，"
           f"{len(ppt_files)} 个 PPT 需转换）:")
     for f in files:

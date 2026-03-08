@@ -7,6 +7,7 @@
 ## 功能特点
 
 - **PDF / PPT / PPTX -> Markdown**：分段 OCR，自动回退（文件上传 -> 逐页图片）
+- **手写识别**：`--handwrite` 模式使用智谱手写 OCR API 识别手写内容
 - **并发处理**：当文件有多个片段时，2 段并行 OCR（GLM-OCR API 最大并发数为 2）
 - **长截图支持**：自动切分超长图片（如微信聊天记录截图），重叠分段避免截断（仅文字 OCR，不提取图片）
 - **断点续传**：已完成的段落不会重复处理，中断后再次运行即可继续
@@ -90,7 +91,8 @@ GLM_API_KEY=你的API密钥
 
 ```bash
 # 将 PDF/PPT/图片放入 input/ 目录
-python ocr.py
+python ocr.py               # 标准 OCR（印刷体、公式等）
+python ocr.py --handwrite   # 手写识别模式
 # Markdown 输出到 output/
 ```
 
@@ -135,7 +137,7 @@ python clean_junk_images.py
 
 - **幻觉问题**：GLM 对模糊文字会猜测合理值而非报错——财务/医疗等需要绝对精度的场景慎用
 - **复读 bug**：处理极度密集的 Excel 截图时偶尔会循环输出同一行
-- **手写识别差**：手写场景建议用 Claude 或 GPT
+- **手写识别**：标准模式对手写内容识别较差，手写场景请用 `--handwrite` 模式（或 Claude/GPT 获得最佳质量）。手写模式仅输出纯文本（无 Markdown 格式），仅支持图片输入（PDF 会自动转图片），¥0.01/页
 - PPT/PPTX 文件在后台线程转为 PDF（与 OCR 并行），复用单个 PowerPoint COM 实例，不阻塞 PDF/图片的 OCR
 - 源文件在处理后保留在 `input/` 中，不会自动删除
 
