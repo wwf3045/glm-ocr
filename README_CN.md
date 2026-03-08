@@ -136,7 +136,7 @@ python clean_junk_images.py
 - **幻觉问题**：GLM 对模糊文字会猜测合理值而非报错——财务/医疗等需要绝对精度的场景慎用
 - **复读 bug**：处理极度密集的 Excel 截图时偶尔会循环输出同一行
 - **手写识别差**：手写场景建议用 Claude 或 GPT
-- PPT/PPTX 文件会先通过 COM 自动化（PowerPoint/WPS）转为 PDF 再处理
+- PPT/PPTX 文件在后台线程转为 PDF（与 OCR 并行），复用单个 PowerPoint COM 实例，不阻塞 PDF/图片的 OCR
 - 源文件在处理后保留在 `input/` 中，不会自动删除
 
 ## 开源协议

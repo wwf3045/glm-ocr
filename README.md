@@ -136,7 +136,7 @@ Removes common OCR artifacts (background images ~3.2MB, icons <3KB) and cleans u
 - **Hallucination**: GLM may guess plausible values for blurry text instead of returning errors — avoid for financial/medical documents requiring exact precision
 - **Repetition bug**: Occasionally loops on dense Excel screenshots, repeating the same row
 - **Handwriting**: Weak on handwritten content — use Claude or GPT instead
-- PPT/PPTX files are first converted to PDF via COM automation (PowerPoint/WPS) before OCR
+- PPT/PPTX files are converted to PDF in a background thread (parallel with OCR), using a single reusable PowerPoint COM instance
 - Source files in `input/` are preserved after processing
 
 ## License

@@ -16,6 +16,7 @@ GLM-OCR 批量文档识别脚本
 import base64
 import io
 import os
+import queue
 import re
 import sys
 import time
@@ -47,7 +48,7 @@ PAGES_PER_MD_PDF = 20        # PDF：每 20 页一个 .md
 PAGES_PER_MD_PPT = 50        # PPT/PPTX：每 50 页(slide)一个 .md
 RETRY_TIMES = 3              # 失败重试次数
 RETRY_DELAY = 5              # 重试间隔（秒）
-FALLBACK_DPI = 150           # 回退图片模式的 DPI
+FALLBACK_DPI = 300           # 回退图片模式的 DPI
 MAX_WORKERS = 2              # API 最大并发数
 IMAGE_SEGMENT_HEIGHT = 4000  # 长图每段高度（像素）
 IMAGE_OVERLAP = 200          # 相邻段重叠像素（避免截断文字）
@@ -124,7 +125,7 @@ def convert_ppt_to_pdf(ppt_path: str, pdf_path: str):
                 return False
 
     try:
-        ppt_app.Visible = False
+        ppt_app.Visible = True   # Must be True for PDF export to work
         abs_ppt = os.path.abspath(ppt_path)
         abs_pdf = os.path.abspath(pdf_path)
         presentation = ppt_app.Presentations.Open(abs_ppt, WithWindow=False)
@@ -563,6 +564,56 @@ def process_file(client: ZaiClient, file_path: Path):
         process_image(client, file_path, book_dir)
 
 
+def _batch_convert_ppts(ppt_files: list, converted_queue: queue.Queue,
+                        done_event: threading.Event):
+    """
+    后台线程：批量将 PPT/PPTX 转为 PDF。
+    复用单个 PowerPoint 实例（比每文件创建/销毁快得多）。
+    转换完成的文件放入 converted_queue，供主线程 OCR。
+    """
+    import pythoncom
+    pythoncom.CoInitialize()
+
+    ppt_app = None
+    try:
+        import win32com.client
+        ppt_app = win32com.client.Dispatch("PowerPoint.Application")
+        ppt_app.Visible = True  # Must be True for PDF export
+
+        for f in ppt_files:
+            book_dir = OUTPUT_DIR / clean_name(f.stem)
+            book_dir.mkdir(parents=True, exist_ok=True)
+            pdf_path = book_dir / f"{f.stem}.pdf"
+
+            if pdf_path.exists():
+                _tprint(f"  [PPT→PDF] {f.name} 已转换，跳过")
+                converted_queue.put(f)
+                continue
+
+            try:
+                abs_ppt = os.path.abspath(str(f))
+                abs_pdf = os.path.abspath(str(pdf_path))
+                pres = ppt_app.Presentations.Open(abs_ppt, WithWindow=False)
+                pres.SaveAs(abs_pdf, 32)  # 32 = ppSaveAsPDF
+                pres.Close()
+                _tprint(f"  [PPT→PDF] {f.name} -> 转换完成")
+                converted_queue.put(f)
+            except Exception as e:
+                _tprint(f"  [PPT→PDF] {f.name} 失败: {e}")
+
+        ppt_app.Quit()
+    except Exception as e:
+        _tprint(f"  [!] PPT 转换器错误: {e}")
+        if ppt_app:
+            try:
+                ppt_app.Quit()
+            except Exception:
+                pass
+    finally:
+        pythoncom.CoUninitialize()
+        done_event.set()
+
+
 def main():
     check_config()
     INPUT_DIR.mkdir(exist_ok=True)
@@ -601,19 +652,67 @@ def main():
         print(f"\n[!] input 文件夹为空，请将 PDF/PPT/图片 放入: {INPUT_DIR}")
         return
 
-    print(f"\n找到 {len(files)} 个文件:")
+    # 分离：可直接 OCR 的文件 vs 需要先转 PDF 的 PPT 文件
+    ready_files = []
+    ppt_files = []
     for f in files:
-        print(f"  - {f.name}")
+        if f.suffix.lower() in (".ppt", ".pptx"):
+            ppt_files.append(f)
+        else:
+            ready_files.append(f)
+
+    total = len(files)
+    print(f"\n找到 {total} 个文件（{len(ready_files)} 个可直接 OCR，"
+          f"{len(ppt_files)} 个 PPT 需转换）:")
+    for f in files:
+        tag = " [PPT]" if f.suffix.lower() in (".ppt", ".pptx") else ""
+        print(f"  - {f.name}{tag}")
+
+    # ---- 后台启动 PPT→PDF 批量转换 ----
+    converted_queue = queue.Queue()
+    converter_done = threading.Event()
+
+    if ppt_files:
+        converter_thread = threading.Thread(
+            target=_batch_convert_ppts,
+            args=(ppt_files, converted_queue, converter_done),
+            daemon=True,
+        )
+        converter_thread.start()
+        print(f"\n[ok] 后台开始转换 {len(ppt_files)} 个 PPT 文件（与 OCR 并行）")
+    else:
+        converter_done.set()
 
     print(f"\n{'='*50}")
     print("开始批量识别")
     print(f"{'='*50}\n")
 
     success, failed = 0, 0
+    done = 0
     start_time = time.time()
 
-    for i, file_path in enumerate(files, 1):
-        print(f"[{i}/{len(files)}] {file_path.name}")
+    def _process_converted_ppts():
+        """处理所有已转换完成的 PPT（从队列中取出）"""
+        nonlocal done, success, failed
+        while not converted_queue.empty():
+            try:
+                f = converted_queue.get_nowait()
+            except queue.Empty:
+                break
+            done += 1
+            print(f"[{done}/{total}] {f.name}")
+            try:
+                process_file(client, f)
+                success += 1
+            except Exception as e:
+                print(f"  [x] 处理失败: {e}")
+                failed += 1
+            print()
+
+    # ---- 阶段 1：先处理可直接 OCR 的文件（PDF / 图片）----
+    for file_path in ready_files:
+        done += 1
+        print(f"[{done}/{total}] {file_path.name}")
         try:
             process_file(client, file_path)
             success += 1
@@ -621,6 +720,19 @@ def main():
             print(f"  [x] 处理失败: {e}")
             failed += 1
         print()
+
+        # 每处理完一个，检查是否有 PPT 已转换好，随到随处理
+        _process_converted_ppts()
+
+    # ---- 阶段 2：等待剩余 PPT 转换完成并处理 ----
+    if ppt_files and not converter_done.is_set():
+        print(f"[等待] PDF/图片已全部 OCR 完毕，等待剩余 PPT 转换...")
+        while not converter_done.is_set():
+            converter_done.wait(timeout=2)
+            _process_converted_ppts()
+
+    # 处理最后一批
+    _process_converted_ppts()
 
     elapsed = time.time() - start_time
     minutes, seconds = int(elapsed // 60), int(elapsed % 60)
