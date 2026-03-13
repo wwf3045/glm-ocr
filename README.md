@@ -137,6 +137,45 @@ python audit_ocr_integrity.py
 - `ocr.py` now treats "empty/failed markdown" as a real failure. If segment-level PDF upload is blocked or returns no meaningful content, it falls back to per-page images; if a page still fails, it tries native PDF text extraction; if that still fails, it writes a `.failed.json` report instead of pretending success.
 - A visible failure report is intentional. It means the pipeline surfaced a real problem instead of silently producing incomplete OCR.
 
+## Common Failure Modes and Recommended Handling
+
+- **Provider content filter (`1301 contentFilter`)**:
+  Some pages about security, attacks, or other sensitive topics may be blocked by ZhipuAI. Recommended handling:
+  1. Split the failed segment so unaffected pages can still be saved.
+  2. Retry the blocked page as a single-page segment.
+  3. If it still fails, use a secondary path such as Mathpix, another vision model, or an explicitly documented AI visual transcription from the rendered page image.
+  4. Mark the replacement clearly as non-GLM-OCR output.
+- **Legacy mixed output (`segment_*.md`, old page image dumps)**:
+  Older runs may leave mixed naming schemes or image-only remnants in `output/`. Recommended handling:
+  1. Run `audit_ocr_integrity.py`.
+  2. Do not delete old segments until the new ranged `.md` files are confirmed to cover the same pages.
+  3. Prefer rerunning only the affected range instead of rerunning the whole book.
+- **Garbled filenames from archive extraction / Windows encoding**:
+  ZIP/RAR extraction may produce mojibake file names. Recommended handling:
+  1. Rename the source files first.
+  2. Keep `input/`, `output/`, and downstream library names synchronized.
+  3. Save the rename mapping for later traceability.
+- **PPT conversion artifacts**:
+  PPT/PPTX must be converted to PDF before OCR. Recommended handling:
+  1. Keep converted PDFs in `_cache/ppt_pdf/`.
+  2. Do not treat cached PPT PDFs as OCR output.
+  3. Do not import cache files into downstream knowledge libraries.
+- **Editable-text fallback is not guaranteed**:
+  Some scanned or image-only PDFs return no native text at all, so PDF text fallback may be empty. Recommended handling:
+  1. Expect this on older scans and textbook page images.
+  2. Switch to image OCR or another vision path rather than assuming native text extraction will save the page.
+
+## Recommended Workflow for Personal Knowledge Pipelines
+
+1. Keep a strict three-layer workflow:
+   - source library
+   - OCR intermediate library (`paged md + images`)
+   - final knowledge base
+2. Do not move OCR output into the final knowledge base before `verify_ocr.py` and `audit_ocr_integrity.py` are both clean.
+3. For reference books, keep a directory page / page-offset note so future lookups can map book page numbers back to PDF page numbers.
+4. When one blocked page would invalidate a whole segment, split the segment first so recoverable pages are not lost.
+5. If you must replace one page through a non-GLM path, document it inside the target `.md` header so later auditing stays honest.
+
 ## Clean Junk Images
 
 ```bash

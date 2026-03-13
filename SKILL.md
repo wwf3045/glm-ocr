@@ -36,6 +36,14 @@ Use this skill when the task involves:
 - If a segment still fails after all fallbacks, the pipeline writes `_failed_segments/*.failed.json`.
 - Failed placeholders and failed segment reports mean the OCR result is incomplete. Do not silently pass or move such output downstream.
 
+## Common Problems and Recommended Handling
+
+- `1301 contentFilter`: split the segment first, rerun the blocked page separately, then use a secondary OCR / vision path only for the blocked page if needed.
+- Legacy `segment_*.md`: do not delete until ranged `.md` coverage and content have been compared.
+- Garbled file names from ZIP/RAR extraction: fix source names first, then keep `input/`, `output/`, and downstream library names in sync.
+- Empty native PDF text fallback: common on scanned books; be ready to switch to image OCR or another vision path.
+- If a page is filled through a non-GLM route, mark it as `AI visual supplementation (non-GLM-OCR output)` or equivalent instead of pretending it came from the main OCR pipeline.
+
 ## Notes
 
 - PPT/PPTX temporary PDFs belong in `_cache/ppt_pdf/`, not in `output/`.
