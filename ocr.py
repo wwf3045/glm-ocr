@@ -16,6 +16,7 @@ GLM-OCR 批量文档识别脚本
 import argparse
 import base64
 import io
+import json
 import os
 import queue
 import re
@@ -44,6 +45,8 @@ API_KEY = os.getenv("GLM_API_KEY", "")
 
 INPUT_DIR = Path(__file__).parent / "input"
 OUTPUT_DIR = Path(__file__).parent / "output"
+CACHE_DIR = Path(__file__).parent / "_cache"
+PPT_PDF_CACHE_DIR = CACHE_DIR / "ppt_pdf"
 
 PAGES_PER_MD_PDF = 20        # PDF：每 20 页一个 .md
 PAGES_PER_MD_PPT = 50        # PPT/PPTX：每 50 页(slide)一个 .md
@@ -108,6 +111,28 @@ def clean_name(name: str, max_len: int = 80) -> str:
     return name
 
 
+def has_meaningful_md_content(md_text: str) -> bool:
+    """判断 OCR 结果是否真的有内容，而不只是失败占位注释。"""
+    text = re.sub(r"<!--.*?-->", " ", md_text, flags=re.S)
+    text = re.sub(r"\s+", "", text)
+    return bool(text)
+
+
+def sanitize_error_message(err) -> str:
+    """压缩异常文本，便于写入失败报告。"""
+    if err is None:
+        return ""
+    msg = str(err).strip()
+    msg = re.sub(r"\s+", " ", msg)
+    return msg[:300]
+
+
+def get_segment_failure_path(book_dir: Path, stem: str, page_label: str) -> Path:
+    failed_dir = book_dir / "_failed_segments"
+    failed_dir.mkdir(parents=True, exist_ok=True)
+    return failed_dir / f"{stem}_{page_label}.failed.json"
+
+
 def convert_ppt_to_pdf(ppt_path: str, pdf_path: str):
     """使用 PowerPoint/WPS COM 自动化将 PPTX/PPT 转为 PDF"""
     try:
@@ -168,6 +193,21 @@ def pdf_pages_to_images(pdf_path: str, start: int, end: int, temp_dir: str) -> l
     return paths
 
 
+def extract_pdf_page_text_fallback(pdf_path: str, page_index: int) -> str:
+    """最后兜底：直接从 PDF 页抽文本，适合可编辑 PDF 被 OCR 安全策略误拦的情况。"""
+    doc = fitz.open(pdf_path)
+    try:
+        if page_index < 0 or page_index >= len(doc):
+            return ""
+        text = doc[page_index].get_text("text") or ""
+        text = text.strip()
+        if not text:
+            return ""
+        return text
+    finally:
+        doc.close()
+
+
 def file_to_data_uri(file_path: str) -> str:
     """将本地文件转为 base64 data URI"""
     ext = os.path.splitext(file_path)[1].lower()
@@ -178,22 +218,25 @@ def file_to_data_uri(file_path: str) -> str:
 
 
 def call_glm_ocr_raw(client: ZaiClient, file_path: str):
-    """调用 GLM-OCR API，返回完整响应对象，带重试机制"""
+    """调用 GLM-OCR API，返回 (响应对象, 最后一次错误文本)。"""
     data_uri = file_to_data_uri(file_path)
+    last_error = None
     for attempt in range(1, RETRY_TIMES + 1):
         try:
-            return client.layout_parsing.create(
+            resp = client.layout_parsing.create(
                 model="glm-ocr",
                 file=data_uri,
             )
+            return resp, None
         except Exception as e:
+            last_error = sanitize_error_message(e)
             _tprint(f"    [!] 第 {attempt} 次调用失败: {e}")
             if attempt < RETRY_TIMES:
                 _tprint(f"    等待 {RETRY_DELAY} 秒后重试...")
                 time.sleep(RETRY_DELAY)
             else:
                 _tprint(f"    [x] 已达最大重试次数，跳过此段")
-                return None
+                return None, last_error
 
 
 def get_md_from_response(resp) -> str:
@@ -299,28 +342,46 @@ def call_glm_ocr_with_fallback(client: ZaiClient, pdf_path: str,
                                 start: int, end: int, temp_dir: str):
     """
     先用 PDF 直传调 API；如果返回空，自动回退为逐页转图片模式。
-    返回 (md_text, page_sizes)
+    返回 (md_text, page_sizes, failed_pages)
     """
     seg_pdf = os.path.join(temp_dir, f"seg_{start+1}-{end}.pdf")
     extract_pdf_segment(pdf_path, start, end, seg_pdf)
-    resp = call_glm_ocr_raw(client, seg_pdf)
+    resp, seg_error = call_glm_ocr_raw(client, seg_pdf)
     md_text = get_md_from_response(resp)
     page_sizes = get_api_page_sizes(resp) if resp else {}
 
-    if md_text.strip():
-        return md_text, page_sizes
+    if has_meaningful_md_content(md_text):
+        return md_text, page_sizes, []
 
     # 回退：逐页转图片
     _tprint(f"    PDF 直传返回空，回退为图片模式...", flush=True)
     img_paths = pdf_pages_to_images(pdf_path, start, end, temp_dir)
     page_results = []
+    failed_pages = []
     for j, img_path in enumerate(img_paths):
-        _tprint(f"    第 {start+j+1} 页(图片模式)...", flush=True)
-        resp_img = call_glm_ocr_raw(client, img_path)
-        page_results.append(get_md_from_response(resp_img))
+        page_no = start + j + 1
+        _tprint(f"    第 {page_no} 页(图片模式)...", flush=True)
+        resp_img, page_error = call_glm_ocr_raw(client, img_path)
+        page_md = get_md_from_response(resp_img)
+        if has_meaningful_md_content(page_md):
+            page_results.append(page_md)
+        else:
+            fallback_text = extract_pdf_page_text_fallback(pdf_path, page_no - 1)
+            if has_meaningful_md_content(fallback_text):
+                page_results.append(
+                    f"<!-- 第 {page_no} 页使用 PDF 文本回退 -->\n\n{fallback_text}"
+                )
+                continue
+            failed_pages.append({
+                "page": page_no,
+                "reason": page_error or seg_error or "empty_result",
+            })
+            page_results.append(
+                f"<!-- OCR 页失败: {page_no} | reason: {page_error or seg_error or 'empty_result'} -->"
+            )
         if j < len(img_paths) - 1:
             time.sleep(0.5)
-    return "\n\n".join(page_results), {}
+    return "\n\n".join(page_results), {}, failed_pages
 
 
 # ============================================================
@@ -361,13 +422,13 @@ def ocr_single_image_b64(client: ZaiClient, img_b64: str):
                 model="glm-ocr",
                 file=data_uri,
             )
-            return get_md_from_response(resp)
+            return get_md_from_response(resp), None
         except Exception as e:
             _tprint(f"    [!] 第 {attempt} 次调用失败: {e}")
             if attempt < RETRY_TIMES:
                 time.sleep(RETRY_DELAY)
             else:
-                return None
+                return None, sanitize_error_message(e)
 
 
 def process_long_image(client: ZaiClient, file_path: Path, book_dir: Path):
@@ -390,14 +451,14 @@ def process_long_image(client: ZaiClient, file_path: Path, book_dir: Path):
 
         print(f"  段 {i + 1}/{total}...", flush=True)
         img_b64 = pil_to_base64(seg)
-        result = ocr_single_image_b64(client, img_b64)
+        result, error = ocr_single_image_b64(client, img_b64)
 
-        if result:
+        if result and has_meaningful_md_content(result):
             seg_md.write_text(result, encoding="utf-8")
             results.append(result)
             print(f"  段 {i + 1} 完成")
         else:
-            print(f"  段 {i + 1} 失败！")
+            print(f"  段 {i + 1} 失败！{(' ' + error) if error else ''}")
 
     img.close()
 
@@ -527,13 +588,15 @@ def _process_one_segment(client: ZaiClient, pdf_path: str, seg_start: int,
                          file_name: str):
     """处理 PDF 的一个分段（供线程池调用）"""
     page_label = f"{seg_start+1:04d}-{seg_end:04d}"
-    md_filename = f"{clean_name(Path(pdf_path).stem)}_{page_label}.md"
+    stem = clean_name(Path(pdf_path).stem)
+    md_filename = f"{stem}_{page_label}.md"
     md_path = book_dir / md_filename
+    failure_path = get_segment_failure_path(book_dir, stem, page_label)
 
     _tprint(f"  [{seg_start+1}-{seg_end}] 调用 API...", flush=True)
 
     with tempfile.TemporaryDirectory() as temp_dir:
-        md_text, page_sizes = call_glm_ocr_with_fallback(
+        md_text, page_sizes, failed_pages = call_glm_ocr_with_fallback(
             client, pdf_path, seg_start, seg_end, temp_dir
         )
 
@@ -541,9 +604,40 @@ def _process_one_segment(client: ZaiClient, pdf_path: str, seg_start: int,
     md_text = replace_bbox_images(md_text, pdf_path, seg_start,
                                    images_dir, page_sizes)
 
+    if failed_pages:
+        failure_path.write_text(
+            json.dumps({
+                "file": file_name,
+                "page_range": page_label,
+                "failed_pages": failed_pages,
+            }, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        raise RuntimeError(
+            f"第 {seg_start+1}-{seg_end} 页有 {len(failed_pages)} 页逐页回退后仍失败"
+        )
+
+    if not has_meaningful_md_content(md_text):
+        failure_path.write_text(
+            json.dumps({
+                "file": file_name,
+                "page_range": page_label,
+                "failed_pages": [{
+                    "page": f"{seg_start+1}-{seg_end}",
+                    "reason": "empty_or_failure_placeholder",
+                }],
+            }, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        raise RuntimeError(
+            f"第 {seg_start+1}-{seg_end} 页 OCR 为空或只返回失败占位"
+        )
+
     # 加元信息注释头
     header = f"<!-- PDF页码: {seg_start+1}-{seg_end} | 文件: {file_name} -->\n\n"
     md_path.write_text(header + md_text, encoding="utf-8")
+    if failure_path.exists():
+        failure_path.unlink()
 
     _tprint(f"    -> {md_filename}")
     return md_filename
@@ -643,8 +737,13 @@ def process_image(client: ZaiClient, img_path: Path, book_dir: Path):
         return
 
     print(f"  调用 API...")
-    resp = call_glm_ocr_raw(client, str(img_path))
+    resp, error = call_glm_ocr_raw(client, str(img_path))
     md_text = get_md_from_response(resp)
+
+    if not has_meaningful_md_content(md_text):
+        raise RuntimeError(
+            f"图片 OCR 为空或只返回失败占位{(': ' + error) if error else ''}"
+        )
 
     md_path.write_text(md_text, encoding="utf-8")
     print(f"  [ok] 完成 -> {md_path.name}")
@@ -662,7 +761,9 @@ def process_file(client: ZaiClient, file_path: Path):
 
     if ext in (".pptx", ".ppt"):
         # PPT 先转 PDF 再处理
-        pdf_path = book_dir / f"{file_path.stem}.pdf"
+        cache_dir = PPT_PDF_CACHE_DIR / clean_name(file_path.stem)
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        pdf_path = cache_dir / f"{clean_name(file_path.stem)}.pdf"
         if not pdf_path.exists():
             print(f"  转换 PPT -> PDF...", flush=True)
             if not convert_ppt_to_pdf(str(file_path), str(pdf_path)):
@@ -734,6 +835,8 @@ def main():
     check_config()
     INPUT_DIR.mkdir(exist_ok=True)
     OUTPUT_DIR.mkdir(exist_ok=True)
+    CACHE_DIR.mkdir(exist_ok=True)
+    PPT_PDF_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
     mode = "手写识别" if args.handwrite else "GLM-OCR"
 

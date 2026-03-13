@@ -27,9 +27,13 @@ except ImportError:
 
 INPUT_DIR = Path(__file__).parent / "input"
 OUTPUT_DIR = Path(__file__).parent / "output"
+CACHE_DIR = Path(__file__).parent / "_cache"
+PPT_PDF_CACHE_DIR = CACHE_DIR / "ppt_pdf"
 
 SUPPORTED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".pdf", ".pptx", ".ppt"}
 MIN_MD_SIZE = 100  # 字节，低于此视为空文件
+HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.S)
+WHITESPACE_RE = re.compile(r"\s+")
 
 
 def clean_name(name: str, max_len: int = 80) -> str:
@@ -57,6 +61,18 @@ def get_max_page_from_mds(md_files):
     return max_page
 
 
+def get_covered_pages_from_mds(md_files):
+    """从 .md 文件名中提取已覆盖页码集合。"""
+    covered = set()
+    for md in md_files:
+        m = re.search(r"_(\d{4})-(\d{4})\.md$", md.name)
+        if m:
+            start = int(m.group(1))
+            end = int(m.group(2))
+            covered.update(range(start, end + 1))
+    return covered
+
+
 def get_pdf_pages(path):
     """获取 PDF 总页数"""
     try:
@@ -66,6 +82,12 @@ def get_pdf_pages(path):
         return n
     except Exception:
         return 0
+
+
+def has_meaningful_md_content(text: str) -> bool:
+    text = HTML_COMMENT_RE.sub(" ", text)
+    text = WHITESPACE_RE.sub("", text)
+    return bool(text)
 
 
 def verify():
@@ -106,13 +128,22 @@ def verify():
         md_files = sorted(book_dir.glob("*.md"))
         img_dir = book_dir / "images"
         img_count = len(list(img_dir.glob("*"))) if img_dir.exists() else 0
+        failed_dir = book_dir / "_failed_segments"
+        failed_segment_reports = sorted(failed_dir.glob("*.failed.json")) if failed_dir.exists() else []
 
         if not md_files:
             issues.append(f"[NO MD] {f.name}")
             total_missing += 1
             continue
 
-        # 检查 4：内容非空
+        if failed_segment_reports:
+            issues.append(
+                f"[FAILED_SEGMENT] {f.name}: {len(failed_segment_reports)} 个分段仍有失败记录"
+            )
+            total_partial += 1
+            continue
+
+        # 检查 4：内容非空 / 失败占位
         empty_mds = [md for md in md_files if md.stat().st_size < MIN_MD_SIZE]
         if empty_mds:
             total_empty += len(empty_mds)
@@ -121,26 +152,52 @@ def verify():
                     f"[EMPTY] {f.name} -> {md.name} ({md.stat().st_size}B)"
                 )
 
+        failed_mds = []
+        for md in md_files:
+            text = md.read_text(encoding="utf-8", errors="ignore")
+            if "OCR 页失败" in text:
+                failed_mds.append(md)
+                continue
+            if "OCR 失败" in text and not has_meaningful_md_content(text):
+                failed_mds.append(md)
+
+        if failed_mds:
+            issues.append(
+                f"[FAILED_MD] {f.name}: {len(failed_mds)} 个分段只写入失败占位"
+            )
+            total_partial += 1
+            continue
+
         # 检查 3：页码完整性（PDF / PPT）
         if ext == ".pdf":
             total_pages = get_pdf_pages(f)
-            max_page = get_max_page_from_mds(md_files)
-            if total_pages > 0 and max_page > 0 and max_page < total_pages:
+            covered_pages = get_covered_pages_from_mds(md_files)
+            missing_pages = [
+                page for page in range(1, total_pages + 1)
+                if page not in covered_pages
+            ] if total_pages > 0 else []
+            if total_pages > 0 and missing_pages:
                 issues.append(
                     f"[PARTIAL] {f.name}: {len(md_files)} md, "
-                    f"page {max_page}/{total_pages}, {img_count} img"
+                    f"缺少 {len(missing_pages)} 页覆盖, {img_count} img"
                 )
                 total_partial += 1
                 continue
         elif ext in (".ppt", ".pptx"):
-            pdf_path = book_dir / f"{f.stem}.pdf"
+            pdf_path = PPT_PDF_CACHE_DIR / cleaned / f"{cleaned}.pdf"
+            if not pdf_path.exists():
+                pdf_path = book_dir / f"{f.stem}.pdf"
             if pdf_path.exists():
                 total_pages = get_pdf_pages(pdf_path)
-                max_page = get_max_page_from_mds(md_files)
-                if total_pages > 0 and max_page > 0 and max_page < total_pages:
+                covered_pages = get_covered_pages_from_mds(md_files)
+                missing_pages = [
+                    page for page in range(1, total_pages + 1)
+                    if page not in covered_pages
+                ] if total_pages > 0 else []
+                if total_pages > 0 and missing_pages:
                     issues.append(
                         f"[PARTIAL] {f.name}: {len(md_files)} md, "
-                        f"page {max_page}/{total_pages}, {img_count} img"
+                        f"缺少 {len(missing_pages)} 页覆盖, {img_count} img"
                     )
                     total_partial += 1
                     continue

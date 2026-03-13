@@ -6,12 +6,15 @@ Batch convert documents to clean Markdown using [ZhipuAI GLM-OCR](https://open.b
 
 ## Features
 
-- **PDF / PPT / PPTX -> Markdown**: segment-based OCR with automatic fallback (file upload -> per-page image)
+- **PDF / PPT / PPTX -> Markdown**: segment-based OCR with failure-safe fallback (`PDF upload -> per-page image -> native PDF text fallback`)
 - **Handwriting recognition**: `--handwrite` mode uses ZhipuAI handwriting OCR API for handwritten content
 - **Concurrent processing**: when a file has multiple segments, processes 2 segments in parallel (GLM-OCR API max concurrency is 2)
 - **Long screenshot support**: auto-splits tall images (e.g. chat screenshots) into overlapping segments (text OCR only, no image extraction)
 - **Resume from breakpoint**: already-completed segments are skipped on re-run
 - **Image extraction**: embedded images are saved to `images/` subfolder
+- **Explicit failure reporting**: segments that still fail after fallback are recorded in `_failed_segments/*.failed.json` and are never silently treated as complete
+- **Strict validation**: `verify_ocr.py` checks directory/md/page coverage/failure reports, and `audit_ocr_integrity.py` catches legacy mixed-output problems
+- **Clean output tree**: converted PPT PDFs are cached under `_cache/ppt_pdf/` instead of being mixed into `output/`
 - **Junk image cleaner**: removes common artifacts (background images, tiny icons) from OCR output
 - **Math formula support**: LaTeX output (`$...$` inline, `$$...$$` block)
 - **AI coding assistant support**: includes `CLAUDE.md` and `AGENTS.md` for Claude Code, Codex, OpenCode, and OpenClaw
@@ -96,6 +99,15 @@ python ocr.py --handwrite   # Handwriting recognition mode
 # Markdown output in output/
 ```
 
+### 5. Verify Before Calling It Done
+
+```bash
+python verify_ocr.py
+python audit_ocr_integrity.py
+```
+
+Only treat an OCR batch as complete when both checks are clean and the relevant `output/<file>/` directory has no `_failed_segments/*.failed.json`.
+
 ## Output Structure
 
 ```
@@ -104,10 +116,26 @@ output/
     ├── filename_0001-0020.md    # Pages 1-20
     ├── filename_0021-0040.md    # Pages 21-40
     ├── ...
+    ├── _failed_segments/        # Present only when some pages still failed after all fallbacks
+    │   └── filename_0021-0040.failed.json
     └── images/                  # Extracted bbox images
         ├── p0003_fig0001.png
         └── ...
 ```
+
+Converted PPT/PPTX PDFs are cached separately under `_cache/ppt_pdf/<filename>/<filename>.pdf` so `output/` stays focused on OCR artifacts only.
+
+## Verification and Failure Semantics
+
+```bash
+python verify_ocr.py
+python audit_ocr_integrity.py
+```
+
+- `verify_ocr.py` is the acceptance gate. It checks output directories, Markdown presence, page-range continuity, failed placeholders, and `_failed_segments/*.failed.json`.
+- `audit_ocr_integrity.py` is the deeper audit. It highlights high-risk states such as legacy mixed output, coverage gaps, partial failed md files, and explicit failed segment reports.
+- `ocr.py` now treats "empty/failed markdown" as a real failure. If segment-level PDF upload is blocked or returns no meaningful content, it falls back to per-page images; if a page still fails, it tries native PDF text extraction; if that still fails, it writes a `.failed.json` report instead of pretending success.
+- A visible failure report is intentional. It means the pipeline surfaced a real problem instead of silently producing incomplete OCR.
 
 ## Clean Junk Images
 
@@ -137,6 +165,7 @@ Removes common OCR artifacts (background images ~3.2MB, icons <3KB) and cleans u
 
 - **Hallucination**: GLM may guess plausible values for blurry text instead of returning errors — avoid for financial/medical documents requiring exact precision
 - **Repetition bug**: Occasionally loops on dense Excel screenshots, repeating the same row
+- **Provider content filters**: some pages (for example security-related textbook content) may trigger ZhipuAI safety filtering. These pages now stay visible as failed reports instead of being silently counted as finished OCR.
 - **Handwriting**: Standard mode is weak on handwritten content — use `--handwrite` mode for handwritten text (or Claude/GPT for best quality). Handwriting mode outputs plain text only (no Markdown formatting), supports images only (PDFs are auto-converted to images), ¥0.01/page
 - PPT/PPTX files are converted to PDF in a background thread (parallel with OCR), using a single reusable PowerPoint COM instance
 - Source files in `input/` are preserved after processing

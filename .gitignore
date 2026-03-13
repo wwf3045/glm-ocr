@@ -6,6 +6,9 @@ __pycache__/
 *.log
 *.txt
 _tmp_segment_*
+_cache/
+audit_reports/
+output_backups/
 
 # Personal workflow scripts (Obsidian integration, etc.)
 move_lecture_ocr.py
@@ -15,3 +18,9 @@ separate_ocr.py
 auto_rerun.py
 cleanup_api_files.py
 ocr_feb19_original.py
+organize_makeup_course_library.py
+reference_book_metadata.py
+backfill_reference_book_directory_pages.py
+rerun_tail_segments.py
+audit_old_segments.py
+_map_segments_to_ranges.py

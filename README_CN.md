@@ -6,12 +6,15 @@
 
 ## 功能特点
 
-- **PDF / PPT / PPTX -> Markdown**：分段 OCR，自动回退（文件上传 -> 逐页图片）
+- **PDF / PPT / PPTX -> Markdown**：分段 OCR，失败安全回退（整段 PDF 上传 -> 逐页图片 -> 原生 PDF 文本兜底）
 - **手写识别**：`--handwrite` 模式使用智谱手写 OCR API 识别手写内容
 - **并发处理**：当文件有多个片段时，2 段并行 OCR（GLM-OCR API 最大并发数为 2）
 - **长截图支持**：自动切分超长图片（如微信聊天记录截图），重叠分段避免截断（仅文字 OCR，不提取图片）
 - **断点续传**：已完成的段落不会重复处理，中断后再次运行即可继续
 - **图片提取**：内嵌图片自动保存到 `images/` 子目录
+- **失败显式上报**：回退后仍失败的分段会写入 `_failed_segments/*.failed.json`，不会再被静默当成完成
+- **严格验收**：`verify_ocr.py` 检查目录/Markdown/页码覆盖/失败记录，`audit_ocr_integrity.py` 负责深度审计旧残留与高风险状态
+- **输出目录更干净**：PPT 转出来的 PDF 统一缓存到 `_cache/ppt_pdf/`，不再混在 `output/` 里
 - **垃圾图片清理**：自动删除 OCR 产生的常见垃圾图（背景图、小图标）
 - **数学公式支持**：LaTeX 输出（行内 `$...$`，独立公式 `$$...$$`）
 - **AI 编程助手支持**：内置 `CLAUDE.md` 和 `AGENTS.md`，兼容 Claude Code、Codex、OpenCode、OpenClaw
@@ -96,6 +99,15 @@ python ocr.py --handwrite   # 手写识别模式
 # Markdown 输出到 output/
 ```
 
+### 5. 验收通过后再算完成
+
+```bash
+python verify_ocr.py
+python audit_ocr_integrity.py
+```
+
+只有当这两个检查都通过，且对应 `output/<文件名>/` 下没有 `_failed_segments/*.failed.json` 时，才应把这批 OCR 视为真正完成。
+
 ## 输出结构
 
 ```
@@ -104,10 +116,26 @@ output/
     ├── 文件名_0001-0020.md    # 第 1-20 页
     ├── 文件名_0021-0040.md    # 第 21-40 页
     ├── ...
+    ├── _failed_segments/      # 仅当所有回退后仍有失败页时出现
+    │   └── 文件名_0021-0040.failed.json
     └── images/                # 提取的 bbox 图片
         ├── p0003_fig0001.png
         └── ...
 ```
+
+PPT/PPTX 转出来的 PDF 会单独缓存到 `_cache/ppt_pdf/<文件名>/<文件名>.pdf`，`output/` 只保留 OCR 结果本身。
+
+## 验收与失败语义
+
+```bash
+python verify_ocr.py
+python audit_ocr_integrity.py
+```
+
+- `verify_ocr.py` 是验收闸门，检查输出目录、Markdown 是否存在、页码是否连续覆盖、是否出现失败占位，以及 `_failed_segments/*.failed.json`。
+- `audit_ocr_integrity.py` 是深度审计，专门抓高风险状态，比如旧版残留混入、覆盖缺口、部分失败 Markdown、失败分段报告等。
+- `ocr.py` 现在把“空 Markdown / 失败占位”当成真正失败处理。整段 PDF 上传失败或无有效正文时，会自动回退到逐页图片；单页仍失败时，再尝试原生 PDF 文本兜底；如果还是失败，就写 `.failed.json` 报告，而不是伪装成成功。
+- 看到失败报告并不代表脚本坏了，恰恰说明这次没有把残缺结果偷偷混进完成品里。
 
 ## 清理垃圾图片
 
@@ -137,6 +165,7 @@ python clean_junk_images.py
 
 - **幻觉问题**：GLM 对模糊文字会猜测合理值而非报错——财务/医疗等需要绝对精度的场景慎用
 - **复读 bug**：处理极度密集的 Excel 截图时偶尔会循环输出同一行
+- **服务端内容安全过滤**：某些页面（例如数据库安全、攻击示例等内容）可能触发智谱的安全过滤。现在这类页面会被明确标成失败分段，而不会再被静默算作“完成”。
 - **手写识别**：标准模式对手写内容识别较差，手写场景请用 `--handwrite` 模式（或 Claude/GPT 获得最佳质量）。手写模式仅输出纯文本（无 Markdown 格式），仅支持图片输入（PDF 会自动转图片），¥0.01/页
 - PPT/PPTX 文件在后台线程转为 PDF（与 OCR 并行），复用单个 PowerPoint COM 实例，不阻塞 PDF/图片的 OCR
 - 源文件在处理后保留在 `input/` 中，不会自动删除
