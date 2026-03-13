@@ -108,6 +108,8 @@ python audit_ocr_integrity.py
 
 只有当这两个检查都通过，且对应 `output/<文件名>/` 下没有 `_failed_segments/*.failed.json` 时，才应把这批 OCR 视为真正完成。
 
+关于“非 GLM 补页”的正式审计约定，见：[OCR_AUDIT_POLICY_CN.md](OCR_AUDIT_POLICY_CN.md)
+
 ## 输出结构
 
 ```

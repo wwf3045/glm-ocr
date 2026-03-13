@@ -43,6 +43,7 @@ Use this skill when the task involves:
 - Garbled file names from ZIP/RAR extraction: fix source names first, then keep `input/`, `output/`, and downstream library names in sync.
 - Empty native PDF text fallback: common on scanned books; be ready to switch to image OCR or another vision path.
 - If a page is filled through a non-GLM route, mark it as `AI visual supplementation (non-GLM-OCR output)` or equivalent instead of pretending it came from the main OCR pipeline.
+- For the exact marker format and audit rules, follow `OCR_AUDIT_POLICY.md`.
 
 ## Notes
 

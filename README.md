@@ -108,6 +108,8 @@ python audit_ocr_integrity.py
 
 Only treat an OCR batch as complete when both checks are clean and the relevant `output/<file>/` directory has no `_failed_segments/*.failed.json`.
 
+Detailed audit convention for non-GLM page supplementation: [OCR_AUDIT_POLICY.md](OCR_AUDIT_POLICY.md)
+
 ## Output Structure
 
 ```

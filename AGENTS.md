@@ -34,3 +34,4 @@ python clean_junk_images.py       # Remove junk images from output
 - Treat any `_failed_segments/*.failed.json`, `[FAILED_SEGMENT]`, or `"OCR 页失败"` marker as an incomplete OCR result
 - If a provider content filter blocks one page, first split the segment so unaffected pages can still be saved; only then escalate to another OCR or vision path for the blocked page
 - If a page is replaced through a non-GLM route, label it clearly as AI visual supplementation / non-GLM-OCR output rather than pretending it came from the main OCR pipeline
+- Use the `OCR_AUDIT` marker and follow `OCR_AUDIT_POLICY.md` whenever a page is supplemented outside the main GLM pipeline

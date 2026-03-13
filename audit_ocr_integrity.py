@@ -43,6 +43,7 @@ NEW_IMAGE_RE = re.compile(r"p\d{4}_fig\d{4}\.png$", re.I)
 HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.S)
 IMAGE_LINK_RE = re.compile(r"!\[[^\]]*\]\([^)]+\)")
 WHITESPACE_RE = re.compile(r"\s+")
+NON_GLM_AUDIT_RE = re.compile(r"OCR_AUDIT:\s*.*supplement=non_glm", re.I)
 
 
 def clean_name(name: str, max_len: int = 80) -> str:
@@ -90,6 +91,7 @@ class MdInfo:
     meaningful_chars: int
     has_failure_marker: bool
     full_failed: bool
+    has_documented_non_glm_supplement: bool
 
 
 @dataclass
@@ -110,6 +112,7 @@ class AuditItem:
     new_image_count: int = 0
     total_image_count: int = 0
     failed_segment_report_count: int = 0
+    documented_non_glm_md_count: int = 0
     covered_pages: int | None = None
     missing_pages: list[int] = field(default_factory=list)
     status: str = "unknown"
@@ -122,12 +125,14 @@ def analyze_md(md_path: Path) -> MdInfo:
     meaningful = strip_meaningful_text(text)
     has_failure = ("OCR 失败" in text) or ("OCR 页失败" in text)
     full_failed = ("OCR 失败" in text) and not meaningful
+    has_documented_non_glm = bool(NON_GLM_AUDIT_RE.search(text))
     return MdInfo(
         path=str(md_path),
         size=md_path.stat().st_size,
         meaningful_chars=len(meaningful),
         has_failure_marker=has_failure,
         full_failed=full_failed,
+        has_documented_non_glm_supplement=has_documented_non_glm,
     )
 
 
@@ -203,6 +208,12 @@ def classify_item(item: AuditItem, output_only: bool = False) -> None:
         item.status = "legacy_mixed_output"
         item.reasons.append("目录里混有旧版 segment 输出")
 
+    if item.documented_non_glm_md_count > 0:
+        item.reasons.append(f"存在 {item.documented_non_glm_md_count} 个已登记的非 GLM 补页")
+
+    if item.status == "unknown" and item.documented_non_glm_md_count > 0:
+        item.status = "complete_with_documented_non_glm_pages"
+
     if item.status == "unknown" and item.extra_pdf_count > 0:
         item.status = "complete_with_temp_pdf"
         item.reasons.append("内容看起来完整，但 output 中保留了 PPT 转 PDF 临时件")
@@ -251,6 +262,9 @@ def analyze_output_dir(name: str, output_dir: Path, input_file: Path | None, out
     item.new_image_count = len(new_images)
     item.total_image_count = len(image_files)
     item.failed_segment_report_count = len(failed_segment_reports)
+    item.documented_non_glm_md_count = sum(
+        1 for info in md_infos if info.has_documented_non_glm_supplement
+    )
     item.md_samples = md_infos[:10]
     item.covered_pages, item.missing_pages = collect_coverage(range_mds, item.total_pages)
 
@@ -340,6 +354,20 @@ def render_console(report: dict) -> str:
                 f"range={item['range_md_count']} segment={item['segment_md_count']} "
                 f"failed={item['full_failed_md_count']} old_img={item['old_image_count']} "
                 f"reasons={'; '.join(item['reasons'])}"
+            )
+
+    lines.append("")
+    lines.append("已登记的非 GLM 补页:")
+    documented_items = [
+        item for item in items if item.get("documented_non_glm_md_count", 0) > 0
+    ]
+    if not documented_items:
+        lines.append("  (无)")
+    else:
+        for item in sorted(documented_items, key=lambda x: x["name"]):
+            lines.append(
+                f"  - {item['name']}: {item['documented_non_glm_md_count']} 个 | "
+                f"status={item['status']} | reasons={'; '.join(item['reasons'])}"
             )
 
     return "\n".join(lines)
