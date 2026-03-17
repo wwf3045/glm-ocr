@@ -31,3 +31,24 @@ backfill_reference_book_directory_pages.py
 rerun_tail_segments.py
 audit_old_segments.py
 _map_segments_to_ranges.py
+
+# Local/private workspace
+.env.*
+!.env.example
+local/*
+!local/README.md
+private/
+secrets/
+exports/
+artifacts/
+tmp/
+tmp-*/
+cache/
+.cache/
+*.sqlite
+*.db
+*.session
+*.cookies.json
+*.token
+*.pem
+*.key
