@@ -1,4 +1,6 @@
 zai-sdk
-PyMuPDF
+pypdf
+pypdfium2
 python-dotenv
 Pillow
+PySide6

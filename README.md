@@ -15,7 +15,13 @@ Batch convert documents to clean Markdown using [ZhipuAI GLM-OCR](https://open.b
 - **Explicit failure reporting**: segments that still fail after fallback are recorded in `_failed_segments/*.failed.json` and are never silently treated as complete
 - **Strict validation**: `verify_ocr.py` checks directory/md/page coverage/failure reports, and `audit_ocr_integrity.py` catches legacy mixed-output problems
 - **Clean output tree**: converted PPT PDFs are cached under `_cache/ppt_pdf/` instead of being mixed into `output/`
-- **Junk image cleaner**: removes common artifacts (background images, tiny icons) from OCR output
+- **Markdown cleanup at the OCR boundary**: normalizes OCR math delimiters so `$ 2x+1 $` becomes `$2x+1$` before downstream note generation
+- **Suspicious math-command audit**: can emit a report of suspicious commands still left after cleanup, so the remaining OCR edge cases are explicit
+- **Visual-block suppression**: filters header/footer strips, page-number corners, logos, watermarks, and glyph-fragment crops before they enter `images/`
+- **Reference-book metadata**: generates `目录页.md`, page-offset notes, QR resource aggregation, and textbook lookup helpers
+- **Manual image review UI**: local reviewer for duplicate / similar OCR images, blacklist learning, and group-by-group deletion
+- **Junk image audit tools**: exact-duplicate audit, grayscale similarity search, orphan-image maintenance, and targeted watermark purging
+- **No more fitz in the active PDF backend**: the main pipeline now uses `pypdf + pypdfium2`, with `pypdf` for page structure/text and `pypdfium2` for rendering and bbox crops
 - **Math formula support**: LaTeX output (`$...$` inline, `$$...$$` block)
 - **AI coding assistant support**: includes `CLAUDE.md` and `AGENTS.md` for Claude Code, Codex, OpenCode, and OpenClaw
 
@@ -127,6 +133,14 @@ output/
 
 Converted PPT/PPTX PDFs are cached separately under `_cache/ppt_pdf/<filename>/<filename>.pdf` so `output/` stays focused on OCR artifacts only.
 
+For textbooks and reference books, the OCR folder may additionally contain:
+
+```text
+目录页.md
+周边资源-全部.md         # only when QR resources are numerous
+_front_assets/qrcodes/    # extracted QR code snapshots
+```
+
 ## Verification and Failure Semantics
 
 ```bash
@@ -178,13 +192,43 @@ python audit_ocr_integrity.py
 4. When one blocked page would invalidate a whole segment, split the segment first so recoverable pages are not lost.
 5. If you must replace one page through a non-GLM path, document it inside the target `.md` header so later auditing stays honest.
 
+Full source-library -> OCR intermediate library -> Obsidian note workflow:
+
+[KNOWLEDGE_PIPELINE.md](KNOWLEDGE_PIPELINE.md)
+
+## Reference-book Metadata and Downstream Note Workflow
+
+- `reference_book_metadata.py`: generate `目录页.md`, printed-page offsets, and QR resource aggregation from the original PDF
+- `backfill_reference_book_directory_pages.py`: batch refresh textbook metadata across the intermediate library
+- `rerun_pdf_segments.py`: rerun only failed or suspicious page ranges
+- `markdown_cleanup.py` / `repair_math_delimiters.py`: fix OCR math delimiters and generate suspicious-command audit reports before the notes consume the output
+- `duplicate_image_reviewer.py`: local UI for duplicate/similar image review, blacklist learning, and manual deletion
+- `middle_library_image_maintenance.py`: audit orphan images and keep the OCR intermediate library tidy
+
+This repo now supports not only OCR itself, but also the textbook metadata and handoff steps needed before writing structured course notes.
+
 ## Clean Junk Images
 
 ```bash
-python clean_junk_images.py
+python clean_junk_images.py audit --root output --min-count 4 --copy-samples
+python clean_junk_images.py similar --root output --reference path/to/sample.png --threshold 8
+python clean_junk_images.py purge --root output --manifest confirmed_junk_manifest.txt
 ```
 
-Removes common OCR artifacts (background images ~3.2MB, icons <3KB) and cleans up Markdown references.
+Use `python duplicate_image_reviewer.py --root output` for a local browser UI similar to phone gallery duplicate-photo cleanup.
+
+The old size-based cleaner still exists as an explicit compatibility mode:
+
+```bash
+python clean_junk_images.py legacy-size-clean --root output
+```
+
+Recommended order is:
+
+1. audit duplicate families
+2. review them manually in the UI
+3. learn or purge confirmed junk families
+4. keep ordinary unreferenced images under audit instead of blindly deleting them
 
 ## Configuration
 

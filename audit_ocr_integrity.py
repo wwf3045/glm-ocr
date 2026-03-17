@@ -19,15 +19,11 @@ import sys
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
-try:
-    import fitz  # PyMuPDF
-except ImportError:
-    print("[!] 需要安装 PyMuPDF: pip install PyMuPDF")
-    sys.exit(1)
-
 if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
+from pdf_backend import get_pdf_page_count
 
 ROOT = Path(__file__).parent
 INPUT_DIR = ROOT / "input"
@@ -62,10 +58,7 @@ def clean_name(name: str, max_len: int = 80) -> str:
 
 def get_pdf_pages(path: Path) -> int | None:
     try:
-        doc = fitz.open(str(path))
-        count = len(doc)
-        doc.close()
-        return count
+        return get_pdf_page_count(path)
     except Exception:
         return None
 

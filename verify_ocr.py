@@ -19,11 +19,7 @@ if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
-try:
-    import fitz  # PyMuPDF
-except ImportError:
-    print("[!] 需要安装 PyMuPDF: pip install PyMuPDF")
-    sys.exit(1)
+from pdf_backend import get_pdf_page_count
 
 INPUT_DIR = Path(__file__).parent / "input"
 OUTPUT_DIR = Path(__file__).parent / "output"
@@ -76,10 +72,7 @@ def get_covered_pages_from_mds(md_files):
 def get_pdf_pages(path):
     """获取 PDF 总页数"""
     try:
-        doc = fitz.open(str(path))
-        n = len(doc)
-        doc.close()
-        return n
+        return get_pdf_page_count(path)
     except Exception:
         return 0
 

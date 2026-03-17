@@ -8,6 +8,9 @@ GLM-OCR 批量文档识别脚本
 - PDF 直传返回空时自动回退为逐页转图片模式
 - PPT/PPTX 通过 COM 自动化转为 PDF 后处理
 - 自动裁剪 API 标注的图片区域，保存到 images 文件夹
+- 自动抑制页眉页脚、页码角标、logo、水印和单字符公式碎片图
+- 输出前自动规整 Markdown / LaTeX 分隔符，减少下游 Obsidian 渲染问题
+- 收尾时清理未引用的 legacy 页面对象图和整页候选截图
 - 支持超长截图（微信长截图等），自动分段识别后合并
 - 断点续扫：已处理过的分段自动跳过
 - 失败自动重试 3 次
@@ -24,6 +27,7 @@ import sys
 import time
 import tempfile
 import threading
+from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
@@ -32,10 +36,33 @@ if sys.platform == "win32":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
-import fitz  # PyMuPDF
 from PIL import Image
 from dotenv import load_dotenv
 from zai import ZaiClient, ZhipuAiClient
+from junk_image_blacklist import (
+    DEFAULT_BLACKLIST_PATH,
+    build_signature_from_image,
+    ensure_registry as ensure_blacklist_registry,
+    matches_family as image_matches_blacklist_family,
+)
+from markdown_cleanup import (
+    normalize_ocr_markdown,
+    repair_markdown_file,
+    write_markdown_text,
+    write_math_audit_report,
+)
+from ocr_image_index import (
+    audit_orphan_images,
+    collect_referenced_image_counts,
+    inspect_image_size,
+    is_page_like_size,
+)
+from pdf_backend import (
+    PdfRenderDocument,
+    extract_pdf_page_text as backend_extract_pdf_page_text,
+    extract_pdf_segment as backend_extract_pdf_segment,
+    get_pdf_page_count,
+)
 
 # ============================================================
 # 配置
@@ -74,6 +101,9 @@ IMAGE_OCR_PROMPT = """请将这张图片中的所有文字内容完整转换为 
 4. 如果是聊天记录截图，保留发言人和时间信息
 5. 如果是网页截图，保留标题、正文和列表结构
 6. 保持原文的段落和换行结构"""
+
+BBOX_IMAGE_PATTERN = re.compile(r"!\[([^\]]*)\]\(page=(\d+),bbox=\[([^\]]+)\]\)")
+LEGACY_PAGE_IMAGE_PATTERN = re.compile(r"^page_\d+_img_\d+\.(png|jpe?g|bmp|webp)$", re.IGNORECASE)
 
 
 # ============================================================
@@ -170,42 +200,26 @@ def convert_ppt_to_pdf(ppt_path: str, pdf_path: str):
 
 def extract_pdf_segment(pdf_path: str, start: int, end: int, out_path: str):
     """从 PDF 中提取 [start, end) 页（0-indexed），保存到 out_path"""
-    doc = fitz.open(pdf_path)
-    new_doc = fitz.open()
-    new_doc.insert_pdf(doc, from_page=start, to_page=end - 1)
-    new_doc.save(out_path)
-    new_doc.close()
-    doc.close()
+    backend_extract_pdf_segment(pdf_path, start, end, out_path)
 
 
 def pdf_pages_to_images(pdf_path: str, start: int, end: int, temp_dir: str) -> list[str]:
     """将 PDF 的 [start, end) 页渲染为 PNG，返回图片路径列表"""
-    doc = fitz.open(pdf_path)
-    zoom = FALLBACK_DPI / 72
-    matrix = fitz.Matrix(zoom, zoom)
     paths = []
-    for i in range(start, end):
-        pix = doc[i].get_pixmap(matrix=matrix)
-        p = os.path.join(temp_dir, f"page_{i+1:04d}.png")
-        pix.save(p)
-        paths.append(p)
-    doc.close()
+    with PdfRenderDocument(pdf_path) as doc:
+        total_pages = len(doc)
+        for i in range(start, min(end, total_pages)):
+            image = doc.render_page(i, dpi=FALLBACK_DPI)
+            p = os.path.join(temp_dir, f"page_{i+1:04d}.png")
+            image.save(p)
+            paths.append(p)
     return paths
 
 
 def extract_pdf_page_text_fallback(pdf_path: str, page_index: int) -> str:
     """最后兜底：直接从 PDF 页抽文本，适合可编辑 PDF 被 OCR 安全策略误拦的情况。"""
-    doc = fitz.open(pdf_path)
-    try:
-        if page_index < 0 or page_index >= len(doc):
-            return ""
-        text = doc[page_index].get_text("text") or ""
-        text = text.strip()
-        if not text:
-            return ""
-        return text
-    finally:
-        doc.close()
+    text = backend_extract_pdf_page_text(pdf_path, page_index)
+    return text.strip() if text else ""
 
 
 def file_to_data_uri(file_path: str) -> str:
@@ -272,65 +286,308 @@ def get_api_page_sizes(resp) -> dict:
     return sizes
 
 
+def normalize_text_for_coverage(text: str) -> str:
+    text = re.sub(r"<!--.*?-->", " ", text, flags=re.S)
+    text = re.sub(r"!\[[^\]]*\]\([^)]+\)", " ", text)
+    text = re.sub(r"[^\w\u4e00-\u9fff]+", "", text.lower())
+    return text
+
+
+def page_text_is_covered(page_md: str, segment_md: str) -> bool:
+    page_normalized = normalize_text_for_coverage(page_md)
+    segment_normalized = normalize_text_for_coverage(segment_md)
+    if len(page_normalized) >= 6 and page_normalized in segment_normalized:
+        return True
+
+    lines = [
+        normalize_text_for_coverage(line)
+        for line in page_md.splitlines()
+    ]
+    lines = [line for line in lines if len(line) >= 4]
+    lines.sort(key=len, reverse=True)
+    return any(line in segment_normalized for line in lines[:5])
+
+
+def page_to_small_grayscale(image: Image.Image, max_edge: int = 480) -> Image.Image:
+    image = image.convert("L")
+    image.thumbnail((max_edge, max_edge))
+    return image
+
+
+def detect_sparse_title_page_candidates(pdf_path: str, start: int, end: int) -> list[int]:
+    candidates: list[int] = []
+    with PdfRenderDocument(pdf_path) as doc:
+        for page_index in range(start, min(end, len(doc))):
+            image = page_to_small_grayscale(doc.render_page(page_index, dpi=72.0, grayscale=True))
+            width, height = image.size
+            if width <= 0 or height <= 0:
+                continue
+
+            binary = image.point(lambda pixel: 255 if pixel < 232 else 0)
+            bbox = binary.getbbox()
+            if bbox is None:
+                continue
+
+            dark_pixels = sum(1 for pixel in binary.getdata() if pixel > 0)
+            dark_ratio = dark_pixels / max(width * height, 1)
+            bbox_width = bbox[2] - bbox[0]
+            bbox_height = bbox[3] - bbox[1]
+            bbox_area_ratio = (bbox_width * bbox_height) / max(width * height, 1)
+            bbox_width_ratio = bbox_width / max(width, 1)
+            bbox_height_ratio = bbox_height / max(height, 1)
+            center_x = ((bbox[0] + bbox[2]) / 2) / max(width, 1)
+            center_y = ((bbox[1] + bbox[3]) / 2) / max(height, 1)
+
+            if (
+                0.0003 <= dark_ratio <= 0.03
+                and bbox_area_ratio <= 0.45
+                and bbox_width_ratio <= 0.92
+                and bbox_height_ratio <= 0.78
+                and 0.18 <= center_x <= 0.82
+                and 0.05 <= center_y <= 0.90
+            ):
+                candidates.append(page_index)
+    return candidates
+
+
+def bbox_is_near_full_page(coords: list[float], api_size: tuple[float, float]) -> bool:
+    api_w, api_h = api_size
+    if api_w <= 0 or api_h <= 0:
+        return False
+
+    x0, y0, x1, y1 = coords
+    width = max(0.0, x1 - x0)
+    height = max(0.0, y1 - y0)
+    area_ratio = (width * height) / max(api_w * api_h, 1.0)
+    width_ratio = width / api_w
+    height_ratio = height / api_h
+    return area_ratio >= 0.55 or (width_ratio >= 0.78 and height_ratio >= 0.78)
+
+
+def bbox_is_header_footer_like(coords: list[float], api_size: tuple[float, float]) -> bool:
+    """抑制页眉页脚、章节横条、页码角标等窄条型 bbox。"""
+    api_w, api_h = api_size
+    if api_w <= 0 or api_h <= 0:
+        return False
+
+    x0, y0, x1, y1 = coords
+    width = max(0.0, x1 - x0)
+    height = max(0.0, y1 - y0)
+    if width <= 0 or height <= 0:
+        return False
+
+    width_ratio = width / api_w
+    height_ratio = height / api_h
+    top_ratio = y0 / api_h
+    bottom_ratio = (api_h - y1) / api_h
+    left_ratio = x0 / api_w
+    right_ratio = (api_w - x1) / api_w
+    near_top_or_bottom = top_ratio <= 0.08 or bottom_ratio <= 0.06
+    near_side = left_ratio <= 0.08 or right_ratio <= 0.08
+
+    if near_top_or_bottom and width_ratio >= 0.45 and height_ratio <= 0.10:
+        return True
+
+    if near_top_or_bottom and width_ratio >= 0.25 and height_ratio <= 0.06 and near_side:
+        return True
+
+    if near_top_or_bottom and width_ratio <= 0.12 and height_ratio <= 0.08 and near_side:
+        return True
+
+    if near_top_or_bottom and near_side and width_ratio <= 0.28 and height_ratio <= 0.10:
+        return True
+
+    return False
+
+
+def find_suspicious_bbox_pages(md_text: str, page_sizes: dict) -> set[int]:
+    suspicious: set[int] = set()
+    for match in BBOX_IMAGE_PATTERN.finditer(md_text):
+        page_in_seg = int(match.group(2))
+        coords = [float(x.strip()) for x in match.group(3).split(",")]
+        if len(coords) != 4:
+            continue
+        api_size = page_sizes.get(page_in_seg)
+        if not api_size:
+            continue
+        if bbox_is_near_full_page(coords, api_size):
+            suspicious.add(page_in_seg)
+    return suspicious
+
+
+_BLACKLIST_FAMILIES_CACHE: list[dict] | None = None
+
+
+def load_blacklist_families() -> list[dict]:
+    global _BLACKLIST_FAMILIES_CACHE
+    if _BLACKLIST_FAMILIES_CACHE is None:
+        registry = ensure_blacklist_registry(DEFAULT_BLACKLIST_PATH)
+        _BLACKLIST_FAMILIES_CACHE = registry.get("families", [])
+    return _BLACKLIST_FAMILIES_CACHE
+
+
+def estimate_background_brightness(gray: Image.Image) -> float:
+    width, height = gray.size
+    edge = max(1, min(width, height) // 8)
+    samples = []
+    for box in [
+        (0, 0, edge, edge),
+        (width - edge, 0, width, edge),
+        (0, height - edge, edge, height),
+        (width - edge, height - edge, width, height),
+    ]:
+        region = gray.crop(box)
+        samples.extend(region.getdata())
+    if not samples:
+        return 255.0
+    samples.sort()
+    return float(samples[len(samples) // 2])
+
+
+def detect_binary_foreground(gray: Image.Image) -> Image.Image:
+    background = estimate_background_brightness(gray)
+    if background < 128:
+        threshold = min(255, int(background + 42))
+        return gray.point(lambda pixel: 255 if pixel > threshold else 0)
+    threshold = max(0, int(background - 42))
+    return gray.point(lambda pixel: 255 if pixel < threshold else 0)
+
+
+def classify_cropped_image_for_suppression(image: Image.Image) -> tuple[bool, str]:
+    signature = build_signature_from_image(image)
+    for family in load_blacklist_families():
+        if image_matches_blacklist_family(signature, family):
+            return True, f"blacklisted_family:{family['name']}"
+
+    gray = image.convert("L")
+    binary = detect_binary_foreground(gray)
+    bbox = binary.getbbox()
+    if bbox is None:
+        return True, "empty_crop"
+
+    width, height = binary.size
+    fg_pixels = sum(1 for pixel in binary.getdata() if pixel > 0)
+    fg_ratio = fg_pixels / max(width * height, 1)
+    bbox_width = bbox[2] - bbox[0]
+    bbox_height = bbox[3] - bbox[1]
+    bbox_area_ratio = (bbox_width * bbox_height) / max(width * height, 1)
+    max_dim = max(width, height)
+
+    if (
+        max_dim <= 420
+        and fg_ratio <= 0.14
+        and bbox_area_ratio <= 0.20
+        and bbox_width / max(width, 1) <= 0.42
+        and bbox_height / max(height, 1) <= 0.55
+    ):
+        return True, "glyph_fragment"
+
+    return False, ""
+
+
+def ocr_single_pdf_page_image(client: ZaiClient, pdf_path: str, page_index: int, temp_dir: str) -> tuple[str, str | None]:
+    image_paths = pdf_pages_to_images(pdf_path, page_index, page_index + 1, temp_dir)
+    if not image_paths:
+        return "", "page_image_render_failed"
+
+    resp, page_error = call_glm_ocr_raw(client, image_paths[0])
+    page_md = get_md_from_response(resp)
+    if has_meaningful_md_content(page_md):
+        return page_md, None
+
+    fallback_text = extract_pdf_page_text_fallback(pdf_path, page_index)
+    if has_meaningful_md_content(fallback_text):
+        return f"<!-- 第 {page_index+1} 页使用 PDF 文本回退 -->\n\n{fallback_text}", None
+
+    return "", page_error or "empty_result"
+
+
+def inject_page_supplements(md_text: str, supplements: list[dict]) -> str:
+    if not supplements:
+        return md_text
+
+    blocks = []
+    for supplement in supplements:
+        blocks.append(
+            f"<!-- 第 {supplement['page']} 页单页补录 | reason: {supplement['reason']} -->\n\n"
+            f"{supplement['text']}"
+        )
+    return "\n\n".join(blocks) + "\n\n---\n\n" + md_text
+
+
 def replace_bbox_images(md_text: str, pdf_path: str, seg_start: int,
-                        images_dir: str, page_sizes: dict) -> str:
+                        images_dir: str, page_sizes: dict,
+                        suppressed_pages: set[int] | None = None) -> str:
     """
     将 md_results 中的 ![](page=X,bbox=[x0,y0,x1,y1]) 替换为实际裁剪的图片。
     page_sizes: 从 API layout_details 获取的每页渲染尺寸 {page_idx: (w, h)}
     """
-    pattern = re.compile(r"!\[([^\]]*)\]\(page=(\d+),bbox=\[([^\]]+)\]\)")
-    if not pattern.search(md_text):
+    if not BBOX_IMAGE_PATTERN.search(md_text):
         return md_text
 
-    doc = fitz.open(pdf_path)
     os.makedirs(images_dir, exist_ok=True)
     img_count = 0
+    rendered_pages: dict[int, Image.Image] = {}
 
-    def replace_match(match):
-        nonlocal img_count
-        alt = match.group(1)
-        page_in_seg = int(match.group(2))
-        coords = [float(x.strip()) for x in match.group(3).split(",")]
-        if len(coords) != 4:
-            return match.group(0)
+    with PdfRenderDocument(pdf_path) as doc:
+        def replace_match(match):
+            nonlocal img_count
+            alt = match.group(1)
+            page_in_seg = int(match.group(2))
+            coords = [float(x.strip()) for x in match.group(3).split(",")]
+            if len(coords) != 4:
+                return match.group(0)
 
-        real_page = seg_start + page_in_seg
-        if real_page >= len(doc):
-            return match.group(0)
+            real_page = seg_start + page_in_seg
+            if real_page >= len(doc):
+                return match.group(0)
 
-        # 获取该页的 API 渲染尺寸
-        api_size = page_sizes.get(page_in_seg)
-        if not api_size:
-            for s in page_sizes.values():
-                api_size = s
-                break
+            api_size = page_sizes.get(page_in_seg)
             if not api_size:
-                api_size = (2040, 2520)
+                for size_candidate in page_sizes.values():
+                    api_size = size_candidate
+                    break
+                if not api_size:
+                    api_size = (2040, 2520)
 
-        api_w, api_h = api_size
-        page = doc[real_page]
-        rect = page.rect
+            if suppressed_pages and page_in_seg in suppressed_pages and bbox_is_near_full_page(coords, api_size):
+                return ""
 
-        # 将 API bbox 换算到 PDF 坐标
-        sx = rect.width / api_w
-        sy = rect.height / api_h
-        x0, y0, x1, y1 = coords
-        clip = fitz.Rect(x0 * sx, y0 * sy, x1 * sx, y1 * sy)
+            if bbox_is_header_footer_like(coords, api_size):
+                _tprint(f"    [skip] 第{real_page+1}页 bbox 图被抑制：header_footer_like")
+                return ""
 
-        # 用 3x 缩放裁剪，约 216dpi
-        pix = page.get_pixmap(matrix=fitz.Matrix(3, 3), clip=clip)
-        if pix.width < 5 or pix.height < 5:
-            return match.group(0)
+            try:
+                rendered_page = rendered_pages.get(real_page)
+                if rendered_page is None:
+                    rendered_page = doc.render_page(real_page, dpi=216.0)
+                    rendered_pages[real_page] = rendered_page
+                cropped_image = doc.render_bbox_crop(
+                    real_page,
+                    tuple(coords),
+                    api_size,
+                    dpi=216.0,
+                    rendered_page=rendered_page,
+                )
+            except Exception:
+                return match.group(0)
 
-        img_count += 1
-        img_name = f"p{real_page+1:04d}_fig{img_count:04d}.png"
-        pix.save(os.path.join(images_dir, img_name))
+            if cropped_image.width < 5 or cropped_image.height < 5:
+                return match.group(0)
 
-        label = f"第{real_page+1}页-图{img_count}"
-        return f"![{label}](images/{img_name})"
+            suppress, reason = classify_cropped_image_for_suppression(cropped_image)
+            if suppress:
+                _tprint(f"    [skip] 第{real_page+1}页 bbox 图被抑制：{reason}")
+                return ""
 
-    new_text = pattern.sub(replace_match, md_text)
-    doc.close()
+            img_count += 1
+            img_name = f"p{real_page+1:04d}_fig{img_count:04d}.png"
+            cropped_image.save(os.path.join(images_dir, img_name))
+
+            label = alt or f"第{real_page+1}页-图{img_count}"
+            return f"![{label}](images/{img_name})"
+
+        new_text = BBOX_IMAGE_PATTERN.sub(replace_match, md_text)
 
     if img_count > 0:
         _tprint(f"    提取了 {img_count} 张图片")
@@ -342,16 +599,46 @@ def call_glm_ocr_with_fallback(client: ZaiClient, pdf_path: str,
                                 start: int, end: int, temp_dir: str):
     """
     先用 PDF 直传调 API；如果返回空，自动回退为逐页转图片模式。
-    返回 (md_text, page_sizes, failed_pages)
+    返回包含主文本、页尺寸、失败页、单页补录和整页 bbox 抑制页的字典。
     """
     seg_pdf = os.path.join(temp_dir, f"seg_{start+1}-{end}.pdf")
     extract_pdf_segment(pdf_path, start, end, seg_pdf)
     resp, seg_error = call_glm_ocr_raw(client, seg_pdf)
     md_text = get_md_from_response(resp)
     page_sizes = get_api_page_sizes(resp) if resp else {}
+    sparse_candidates = detect_sparse_title_page_candidates(pdf_path, start, end)
 
     if has_meaningful_md_content(md_text):
-        return md_text, page_sizes, []
+        suspicious_pages = set(sparse_candidates) | find_suspicious_bbox_pages(md_text, page_sizes)
+        supplements: list[dict] = []
+        suppressed_pages: set[int] = set()
+
+        for page_index in sorted(suspicious_pages):
+            absolute_page = start + page_index
+            page_md, page_error = ocr_single_pdf_page_image(client, pdf_path, absolute_page, temp_dir)
+            if not has_meaningful_md_content(page_md):
+                if page_error:
+                    _tprint(f"    [warn] 第 {absolute_page+1} 页单页补录失败：{page_error}")
+                continue
+            suppressed_pages.add(page_index)
+            if page_text_is_covered(page_md, md_text):
+                continue
+            supplements.append(
+                {
+                    "page": absolute_page + 1,
+                    "reason": "sparse_title_page" if page_index in sparse_candidates else "full_page_bbox",
+                    "text": page_md,
+                }
+            )
+
+        return {
+            "md_text": md_text,
+            "page_sizes": page_sizes,
+            "failed_pages": [],
+            "supplements": supplements,
+            "suppressed_pages": sorted(suppressed_pages),
+            "sparse_candidates": [page + 1 for page in sparse_candidates],
+        }
 
     # 回退：逐页转图片
     _tprint(f"    PDF 直传返回空，回退为图片模式...", flush=True)
@@ -381,7 +668,14 @@ def call_glm_ocr_with_fallback(client: ZaiClient, pdf_path: str,
             )
         if j < len(img_paths) - 1:
             time.sleep(0.5)
-    return "\n\n".join(page_results), {}, failed_pages
+    return {
+        "md_text": "\n\n".join(page_results),
+        "page_sizes": {},
+        "failed_pages": failed_pages,
+        "supplements": [],
+        "suppressed_pages": [],
+        "sparse_candidates": [page + 1 for page in sparse_candidates],
+    }
 
 
 # ============================================================
@@ -446,7 +740,11 @@ def process_long_image(client: ZaiClient, file_path: Path, book_dir: Path):
         # 断点续扫
         if seg_md.exists() and seg_md.stat().st_size > 0:
             print(f"  段 {i + 1}/{total} 已完成，跳过")
-            results.append(seg_md.read_text(encoding="utf-8"))
+            content = seg_md.read_text(encoding="utf-8")
+            normalized = normalize_ocr_markdown(content)
+            if normalized != content:
+                write_markdown_text(seg_md, content)
+            results.append(normalized)
             continue
 
         print(f"  段 {i + 1}/{total}...", flush=True)
@@ -454,8 +752,8 @@ def process_long_image(client: ZaiClient, file_path: Path, book_dir: Path):
         result, error = ocr_single_image_b64(client, img_b64)
 
         if result and has_meaningful_md_content(result):
-            seg_md.write_text(result, encoding="utf-8")
-            results.append(result)
+            write_markdown_text(seg_md, result)
+            results.append(normalize_ocr_markdown(result))
             print(f"  段 {i + 1} 完成")
         else:
             print(f"  段 {i + 1} 失败！{(' ' + error) if error else ''}")
@@ -465,7 +763,7 @@ def process_long_image(client: ZaiClient, file_path: Path, book_dir: Path):
     # 合并所有段为单个 md（如果多于1段）
     if len(results) > 1:
         merged_path = book_dir / f"{file_path.stem}.md"
-        merged_path.write_text("\n\n".join(results), encoding="utf-8")
+        write_markdown_text(merged_path, "\n\n".join(results))
         print(f"  已合并 {len(results)} 段 -> {file_path.stem}.md")
 
 
@@ -497,6 +795,7 @@ def process_handwrite_image(client: ZhipuAiClient, img_path: Path, book_dir: Pat
     """手写识别：处理单张图片"""
     md_path = book_dir / f"{img_path.stem}.md"
     if md_path.exists():
+        repair_markdown_file(md_path)
         print(f"  [跳过] 已存在: {md_path.name}")
         return
 
@@ -504,7 +803,7 @@ def process_handwrite_image(client: ZhipuAiClient, img_path: Path, book_dir: Pat
     with open(str(img_path), "rb") as f:
         img_bytes = f.read()
     text = call_handwrite_ocr(client, img_bytes)
-    md_path.write_text(text, encoding="utf-8")
+    write_markdown_text(md_path, text)
     print(f"  [ok] 完成 -> {md_path.name}")
 
 
@@ -514,15 +813,10 @@ def process_handwrite_pdf(client: ZhipuAiClient, pdf_path: Path, book_dir: Path,
     if pages_per_md is None:
         pages_per_md = PAGES_PER_MD_PDF
 
-    doc = fitz.open(str(pdf_path))
-    total_pages = len(doc)
-    doc.close()
+    total_pages = get_pdf_page_count(pdf_path)
 
     total_segments = -(-total_pages // pages_per_md)
     print(f"  共 {total_pages} 页，将输出 {total_segments} 个 .md 文件")
-
-    zoom = FALLBACK_DPI / 72
-    matrix = fitz.Matrix(zoom, zoom)
 
     for seg_idx in range(total_segments):
         seg_start = seg_idx * pages_per_md
@@ -532,25 +826,27 @@ def process_handwrite_pdf(client: ZhipuAiClient, pdf_path: Path, book_dir: Path,
         md_path = book_dir / md_filename
 
         if md_path.exists():
+            repair_markdown_file(md_path)
             print(f"  [{seg_start+1}-{seg_end}] 已完成，跳过")
             continue
 
         print(f"  [{seg_start+1}-{seg_end}] 逐页手写识别...", flush=True)
-        doc = fitz.open(str(pdf_path))
         page_texts = []
-        for page_idx in range(seg_start, seg_end):
-            pix = doc[page_idx].get_pixmap(matrix=matrix)
-            img_bytes = pix.tobytes("png")
-            print(f"    第 {page_idx+1} 页...", flush=True)
-            text = call_handwrite_ocr(client, img_bytes)
-            if text:
-                page_texts.append(f"<!-- 第{page_idx+1}页 -->\n\n{text}")
-            else:
-                page_texts.append(f"<!-- 第{page_idx+1}页：识别为空 -->")
-        doc.close()
+        with PdfRenderDocument(pdf_path) as doc:
+            for page_idx in range(seg_start, seg_end):
+                image = doc.render_page(page_idx, dpi=FALLBACK_DPI)
+                buf = io.BytesIO()
+                image.save(buf, format="PNG")
+                img_bytes = buf.getvalue()
+                print(f"    第 {page_idx+1} 页...", flush=True)
+                text = call_handwrite_ocr(client, img_bytes)
+                if text:
+                    page_texts.append(f"<!-- 第{page_idx+1}页 -->\n\n{text}")
+                else:
+                    page_texts.append(f"<!-- 第{page_idx+1}页：识别为空 -->")
 
         header = f"<!-- PDF页码: {seg_start+1}-{seg_end} | 文件: {pdf_path.name} | 模式: 手写识别 -->\n\n"
-        md_path.write_text(header + "\n\n".join(page_texts), encoding="utf-8")
+        write_markdown_text(md_path, header + "\n\n".join(page_texts))
         print(f"    -> {md_filename}")
 
     print(f"  [ok] 手写识别完成")
@@ -577,6 +873,14 @@ def process_handwrite_file(client: ZhipuAiClient, file_path: Path):
         process_handwrite_image(client, file_path, book_dir)
     else:
         print(f"  [!] 不支持的文件格式: {ext}")
+        return None
+
+    math_audit = run_math_command_audit(book_dir)
+    math_audit["book_name"] = book_dir.name
+    return {
+        "book_dir": book_dir,
+        "math_audit": math_audit,
+    }
 
 
 # ============================================================
@@ -596,13 +900,26 @@ def _process_one_segment(client: ZaiClient, pdf_path: str, seg_start: int,
     _tprint(f"  [{seg_start+1}-{seg_end}] 调用 API...", flush=True)
 
     with tempfile.TemporaryDirectory() as temp_dir:
-        md_text, page_sizes, failed_pages = call_glm_ocr_with_fallback(
+        segment_result = call_glm_ocr_with_fallback(
             client, pdf_path, seg_start, seg_end, temp_dir
         )
 
+    md_text = segment_result["md_text"]
+    page_sizes = segment_result["page_sizes"]
+    failed_pages = segment_result["failed_pages"]
+
+    if segment_result["supplements"]:
+        _tprint(
+            f"    [info] 第 {seg_start+1}-{seg_end} 页补入 {len(segment_result['supplements'])} 个稀疏章节页/整页截图页",
+            flush=True,
+        )
+        md_text = inject_page_supplements(md_text, segment_result["supplements"])
+
     # 将 ![](page=X,bbox=[...]) 替换为实际裁剪的图片
     md_text = replace_bbox_images(md_text, pdf_path, seg_start,
-                                   images_dir, page_sizes)
+                                   images_dir, page_sizes,
+                                   suppressed_pages=set(segment_result["suppressed_pages"]))
+    md_text = normalize_ocr_markdown(md_text)
 
     if failed_pages:
         failure_path.write_text(
@@ -635,12 +952,100 @@ def _process_one_segment(client: ZaiClient, pdf_path: str, seg_start: int,
 
     # 加元信息注释头
     header = f"<!-- PDF页码: {seg_start+1}-{seg_end} | 文件: {file_name} -->\n\n"
-    md_path.write_text(header + md_text, encoding="utf-8")
+    write_markdown_text(md_path, header + md_text)
     if failure_path.exists():
         failure_path.unlink()
 
     _tprint(f"    -> {md_filename}")
     return md_filename
+
+
+def finalize_pdf_outputs(book_dir: Path):
+    images_dir = book_dir / "images"
+    if images_dir.exists():
+        referenced = collect_referenced_image_counts(book_dir)
+        purged_legacy = 0
+        purged_page_like = 0
+        for image_path in images_dir.iterdir():
+            if not image_path.is_file():
+                continue
+            if referenced.get(image_path.name, 0) > 0:
+                continue
+            if LEGACY_PAGE_IMAGE_PATTERN.match(image_path.name):
+                image_path.unlink()
+                purged_legacy += 1
+                continue
+
+            size = inspect_image_size(image_path)
+            if size and is_page_like_size(*size):
+                image_path.unlink()
+                purged_page_like += 1
+                continue
+        if purged_legacy:
+            print(f"  [cleanup] 清理未引用的 legacy 页面对象图 {purged_legacy} 张")
+        if purged_page_like:
+            print(f"  [cleanup] 清理未引用的整页候选截图 {purged_page_like} 张")
+
+    if images_dir.is_dir() and not any(images_dir.iterdir()):
+        images_dir.rmdir()
+
+    audit = audit_orphan_images(book_dir)
+    report_path = audit.get("report_path")
+    if report_path and audit["orphan_images"]:
+        print(
+            f"  [audit] 孤儿图 {audit['orphan_images']} 张，整页候选 {audit['page_like_orphans']} 张 -> {report_path}"
+        )
+    elif report_path:
+        print("  [audit] 未发现孤儿图")
+    return audit
+
+
+def run_math_command_audit(book_dir: Path) -> dict:
+    report_path = book_dir / "_math_command_audit.md"
+    audit = write_math_audit_report(book_dir, report_path)
+    if audit["total_findings"]:
+        print(
+            f"  [math-audit] 命中 {audit['total_findings']} 个可疑数学命令，"
+            f"涉及 {audit['files_with_findings']} 个文件 -> {report_path}"
+        )
+    else:
+        print("  [math-audit] 未发现剩余可疑数学命令")
+    return audit
+
+
+def write_run_math_audit_summary(audits: list[dict]) -> Path | None:
+    if not audits:
+        return None
+
+    summary_path = OUTPUT_DIR / "_math_command_audit_summary.md"
+    total_findings = sum(audit["total_findings"] for audit in audits)
+    total_books = len(audits)
+    books_with_findings = sum(1 for audit in audits if audit["total_findings"])
+
+    lines = [
+        "# 本次 OCR 数学命令审计汇总",
+        "",
+        f"- 生成时间：`{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}`",
+        f"- 本次书目数：`{total_books}`",
+        f"- 命中可疑项书目：`{books_with_findings}`",
+        f"- 可疑项总数：`{total_findings}`",
+        "",
+        "## 书目结果",
+        "",
+    ]
+
+    for audit in audits:
+        report_path = Path(audit["report_path"])
+        rel_report = report_path.relative_to(OUTPUT_DIR)
+        lines.append(
+            f"- `{audit['book_name']}`：`{audit['total_findings']}` 项，"
+            f"`{audit['files_with_findings']}` 个文件 -> `{rel_report}`"
+        )
+
+    lines.append("")
+    summary_path.write_text("\n".join(lines), encoding="utf-8")
+    print(f"[math-audit] 本次汇总 -> {summary_path}")
+    return summary_path
 
 
 def process_pdf(client: ZaiClient, pdf_path: Path, book_dir: Path,
@@ -653,9 +1058,7 @@ def process_pdf(client: ZaiClient, pdf_path: Path, book_dir: Path,
     if pages_per_md is None:
         pages_per_md = PAGES_PER_MD_PDF
 
-    doc = fitz.open(str(pdf_path))
-    total_pages = len(doc)
-    doc.close()
+    total_pages = get_pdf_page_count(pdf_path)
 
     total_segments = -(-total_pages // pages_per_md)
     print(f"  共 {total_pages} 页，将输出 {total_segments} 个 .md 文件")
@@ -682,6 +1085,7 @@ def process_pdf(client: ZaiClient, pdf_path: Path, book_dir: Path,
 
     if not pending:
         print(f"  [ok] 所有分段已完成")
+        finalize_pdf_outputs(book_dir)
         return
 
     # 并发处理分段
@@ -705,12 +1109,9 @@ def process_pdf(client: ZaiClient, pdf_path: Path, book_dir: Path,
                 _tprint(f"  [x] 段 {seg_start+1}-{seg_end} 处理失败: {e}")
                 failed_segs += 1
 
-    # 清理空的 images 文件夹
-    if os.path.isdir(images_dir) and not os.listdir(images_dir):
-        os.rmdir(images_dir)
-
     print(f"  [ok] 本次完成 {completed} 个分段" +
           (f"，失败 {failed_segs} 个" if failed_segs else ""))
+    finalize_pdf_outputs(book_dir)
 
 
 # ============================================================
@@ -733,6 +1134,7 @@ def process_image(client: ZaiClient, img_path: Path, book_dir: Path):
     md_path = book_dir / f"{img_path.stem}.md"
 
     if md_path.exists():
+        repair_markdown_file(md_path)
         print(f"  [跳过] 已存在: {md_path.name}")
         return
 
@@ -745,7 +1147,7 @@ def process_image(client: ZaiClient, img_path: Path, book_dir: Path):
             f"图片 OCR 为空或只返回失败占位{(': ' + error) if error else ''}"
         )
 
-    md_path.write_text(md_text, encoding="utf-8")
+    write_markdown_text(md_path, md_text)
     print(f"  [ok] 完成 -> {md_path.name}")
 
 
@@ -774,6 +1176,13 @@ def process_file(client: ZaiClient, file_path: Path):
         process_pdf(client, file_path, book_dir, pages_per_md=PAGES_PER_MD_PDF)
     else:
         process_image(client, file_path, book_dir)
+
+    math_audit = run_math_command_audit(book_dir)
+    math_audit["book_name"] = book_dir.name
+    return {
+        "book_dir": book_dir,
+        "math_audit": math_audit,
+    }
 
 
 def _batch_convert_ppts(ppt_files: list, converted_queue: queue.Queue,
@@ -892,12 +1301,15 @@ def main():
         print(f"{'='*50}\n")
 
         success, failed = 0, 0
+        run_math_audits: list[dict] = []
         start_time = time.time()
 
         for i, file_path in enumerate(files, 1):
             print(f"[{i}/{total}] {file_path.name}")
             try:
-                process_handwrite_file(hw_client, file_path)
+                result = process_handwrite_file(hw_client, file_path)
+                if result and result.get("math_audit"):
+                    run_math_audits.append(result["math_audit"])
                 success += 1
             except Exception as e:
                 print(f"  [x] 处理失败: {e}")
@@ -915,6 +1327,7 @@ def main():
         print(f"  耗时: {minutes}分{seconds}秒")
         print(f"  输出: {OUTPUT_DIR}")
         print(f"{'='*50}")
+        write_run_math_audit_summary(run_math_audits)
         return
 
     # ---- 标准 GLM-OCR 模式 ----
@@ -955,11 +1368,12 @@ def main():
 
     success, failed = 0, 0
     done = 0
+    run_math_audits: list[dict] = []
     start_time = time.time()
 
     def _process_converted_ppts():
         """处理所有已转换完成的 PPT（从队列中取出）"""
-        nonlocal done, success, failed
+        nonlocal done, success, failed, run_math_audits
         while not converted_queue.empty():
             try:
                 f = converted_queue.get_nowait()
@@ -968,7 +1382,9 @@ def main():
             done += 1
             print(f"[{done}/{total}] {f.name}")
             try:
-                process_file(client, f)
+                result = process_file(client, f)
+                if result and result.get("math_audit"):
+                    run_math_audits.append(result["math_audit"])
                 success += 1
             except Exception as e:
                 print(f"  [x] 处理失败: {e}")
@@ -980,7 +1396,9 @@ def main():
         done += 1
         print(f"[{done}/{total}] {file_path.name}")
         try:
-            process_file(client, file_path)
+            result = process_file(client, file_path)
+            if result and result.get("math_audit"):
+                run_math_audits.append(result["math_audit"])
             success += 1
         except Exception as e:
             print(f"  [x] 处理失败: {e}")
@@ -1011,6 +1429,7 @@ def main():
     print(f"  耗时: {minutes}分{seconds}秒")
     print(f"  输出: {OUTPUT_DIR}")
     print(f"{'='*50}")
+    write_run_math_audit_summary(run_math_audits)
 
 
 if __name__ == "__main__":

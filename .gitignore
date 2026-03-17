@@ -9,6 +9,13 @@ _tmp_segment_*
 _cache/
 audit_reports/
 output_backups/
+build/
+dist/
+blacklist_gallery/
+junk_image_blacklist.json
+OCRDuplicateReviewerLauncher.exe
+nuitka-crash-report.xml
+ocr_duplicate_reviewer_crash.log
 
 # Personal workflow scripts (Obsidian integration, etc.)
 move_lecture_ocr.py

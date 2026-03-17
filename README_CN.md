@@ -15,7 +15,13 @@
 - **失败显式上报**：回退后仍失败的分段会写入 `_failed_segments/*.failed.json`，不会再被静默当成完成
 - **严格验收**：`verify_ocr.py` 检查目录/Markdown/页码覆盖/失败记录，`audit_ocr_integrity.py` 负责深度审计旧残留与高风险状态
 - **输出目录更干净**：PPT 转出来的 PDF 统一缓存到 `_cache/ppt_pdf/`，不再混在 `output/` 里
-- **垃圾图片清理**：自动删除 OCR 产生的常见垃圾图（背景图、小图标）
+- **OCR 出口公式清洗**：在下游写笔记前自动修正公式分隔符，把 `$ 2x+1 $` 规整成 `$2x+1$`
+- **数学命令审计报告**：每次 OCR 后可自动列出清洗后仍残留的可疑命令，便于继续手工补修
+- **视觉块抑制**：在进入 `images/` 前抑制页眉页脚、页码角标、logo、水印、公式碎片图
+- **教材元数据生成**：支持 `目录页.md`、正文页码偏移、二维码聚合页和教材检索辅助页
+- **人工图片过审前端**：本地 reviewer 可按重复组/相似组浏览图片，学习废图族并人工删除
+- **垃圾图审计工具链**：支持精确重复审计、灰度相似检索、孤儿图治理和定向水印清理
+- **PDF 后端已去 fitz 化**：主链路改为 `pypdf + pypdfium2`，其中 `pypdf` 负责拆分/页数/文本抽取，`pypdfium2` 负责页面渲染与 bbox 裁图
 - **数学公式支持**：LaTeX 输出（行内 `$...$`，独立公式 `$$...$$`）
 - **AI 编程助手支持**：内置 `CLAUDE.md` 和 `AGENTS.md`，兼容 Claude Code、Codex、OpenCode、OpenClaw
 
@@ -127,6 +133,14 @@ output/
 
 PPT/PPTX 转出来的 PDF 会单独缓存到 `_cache/ppt_pdf/<文件名>/<文件名>.pdf`，`output/` 只保留 OCR 结果本身。
 
+对于教材 / 参考书，OCR 目录还可能额外包含：
+
+```text
+目录页.md
+周边资源-全部.md         # 只有二维码很多时才生成
+_front_assets/qrcodes/    # 提取出的二维码截图
+```
+
 ## 验收与失败语义
 
 ```bash
@@ -179,13 +193,47 @@ python audit_ocr_integrity.py
 4. 如果单页问题会拖死整个分段，优先先拆分段，把能保住的页先保住。
 5. 如果某页最终是通过非 GLM-OCR 路径补上的，必须在页头注释里明说来源，保证后续审计时边界清楚。
 
+从原件库 -> OCR 中间文件库 -> Obsidian 正式讲义的完整流程文档：
+
+[KNOWLEDGE_PIPELINE_CN.md](KNOWLEDGE_PIPELINE_CN.md)
+
+## 教材元数据与下游讲义流程
+
+- `reference_book_metadata.py`：从原 PDF 生成 `目录页.md`、页码偏移和二维码聚合
+- `backfill_reference_book_directory_pages.py`：批量刷新整个中间文件库教材元数据
+- `rerun_pdf_segments.py`：只重跑失败页段或可疑页段
+- `markdown_cleanup.py` / `repair_math_delimiters.py`：在讲义消费 OCR 结果前先修正公式分隔符，并生成可疑数学命令审计报告
+- `duplicate_image_reviewer.py`：本地前端，按重复组/相似组人工审核图片
+- `middle_library_image_maintenance.py`：审计孤儿图，维护中间文件库整洁度
+
+现在这个项目不只是 OCR 本身，也覆盖了教材元数据和知识笔记落库前的准备环节。
+
 ## 清理垃圾图片
 
 ```bash
-python clean_junk_images.py
+python clean_junk_images.py audit --root output --min-count 4 --copy-samples
+python clean_junk_images.py similar --root output --reference path/to/sample.png --threshold 8
+python clean_junk_images.py purge --root output --manifest confirmed_junk_manifest.txt
 ```
 
-删除常见 OCR 垃圾图（~3.2MB 背景图、<3KB 小图标），并清理 Markdown 中的失效引用。
+如果想像手机清理相册那样一组一组人工审核，可运行：
+
+```bash
+python duplicate_image_reviewer.py --root output
+```
+
+旧的按尺寸清图还保留为兼容模式，但不再作为默认推荐：
+
+```bash
+python clean_junk_images.py legacy-size-clean --root output
+```
+
+推荐顺序是：
+
+1. 先做重复图审计
+2. 在 reviewer 前端人工过审
+3. 学习或删除确认过的废图族
+4. 对普通未引用图保持审计，不要默认盲删
 
 ## 配置参数
 
