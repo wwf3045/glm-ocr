@@ -4,6 +4,28 @@ English | [简体中文](README_CN.md)
 
 Batch convert documents to clean Markdown using [ZhipuAI GLM-OCR](https://open.bigmodel.cn/) API — the [#1 OCR model on OmniDocBench v1.5](https://opendatalab.com/omnidocbench) as of early 2026. Zero GPU required, LaTeX math support, concurrent processing, resume from breakpoint.
 
+## Contents
+
+- [Features](#features)
+- [Use Cases](#use-cases)
+- [Why GLM?](#why-glm)
+  - [Pricing](#pricing)
+  - [Comparison Summary](#comparison-summary)
+  - [Why Cloud API?](#why-cloud-api)
+- [Quick Start](#quick-start)
+- [Output Structure](#output-structure)
+- [Verification and Failure Semantics](#verification-and-failure-semantics)
+- [Common Failure Modes and Recommended Handling](#common-failure-modes-and-recommended-handling)
+- [Recommended Workflow for Personal Knowledge Pipelines](#recommended-workflow-for-personal-knowledge-pipelines)
+- [Reference-book Metadata and Downstream Note Workflow](#reference-book-metadata-and-downstream-note-workflow)
+- [Clean Junk Images](#clean-junk-images)
+- [Configuration](#configuration)
+- [Requirements](#requirements)
+- [Known Limitations](#known-limitations)
+- [License](#license)
+- [Appendix: Detailed Benchmark Test Results](#appendix-detailed-benchmark-test-results)
+- [Appendix: API Pricing Details](#appendix-api-pricing-details)
+
 ## Features
 
 - **PDF / PPT / PPTX -> Markdown**: segment-based OCR with failure-safe fallback (`PDF upload -> per-page image -> native PDF text fallback`)
