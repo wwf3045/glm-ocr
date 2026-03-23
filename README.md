@@ -1,6 +1,8 @@
 English | [简体中文](README_CN.md)
 
-# GLM-OCR — PDF/PPT/Image to Markdown OCR Converter
+# GLM OCR
+
+> PDF/PPT/Image to Markdown OCR Converter
 
 Batch convert documents to clean Markdown using [ZhipuAI GLM-OCR](https://open.bigmodel.cn/) API — the [#1 OCR model on OmniDocBench v1.5](https://opendatalab.com/omnidocbench) as of early 2026. Zero GPU required, LaTeX math support, concurrent processing, resume from breakpoint.
 
@@ -13,6 +15,7 @@ Batch convert documents to clean Markdown using [ZhipuAI GLM-OCR](https://open.b
   - [Comparison Summary](#comparison-summary)
   - [Why Cloud API?](#why-cloud-api)
 - [Quick Start](#quick-start)
+- [Studio Prototype](#studio-prototype)
 - [Output Structure](#output-structure)
 - [Verification and Failure Semantics](#verification-and-failure-semantics)
 - [Common Failure Modes and Recommended Handling](#common-failure-modes-and-recommended-handling)
@@ -56,9 +59,23 @@ Batch convert documents to clean Markdown using [ZhipuAI GLM-OCR](https://open.b
 
 ## Why GLM?
 
-The [OmniDocBench v1.5](https://opendatalab.com/omnidocbench) benchmark ([GitHub](https://github.com/opendatalab/OmniDocBench)) is the most comprehensive OCR evaluation. As of early February 2026, GLM-OCR ranked **#1** in a 5-model head-to-head test (vs DeepSeek OCR2, MinerU, PaddleOCR VL, PaddleOCR VL 1.5). Around late February 2026, [Unisound U1](https://www.prnewswire.com/news-releases/unisound-u1-ocr-the-first-industrial-grade-document-intelligence-foundation-model-ushering-in-the-ocr-3-0-era-302698482.html) surpassed GLM-OCR on the leaderboard (95.1 vs 94.62), particularly excelling in medical/clinical document scenarios.
+The [OmniDocBench v1.5](https://opendatalab.com/omnidocbench) benchmark ([GitHub](https://github.com/opendatalab/OmniDocBench)) is still one of the best document-parsing references, but there is an important 2026 caveat: **not every “high score” is reported on the same scale**.
 
-For context, general-purpose VLMs score significantly lower on OmniDocBench: **GPT-4o** scores 75.02, **Gemini-2.5 Pro** 88.03, **Qwen3-VL-235B** 89.15 — specialized OCR models like GLM-OCR (0.9B params) outperform them by a wide margin at a fraction of the cost and size.
+- `GLM-OCR 94.62`: an **official raw OmniDocBench v1.5 score**
+- `Qianfan-OCR 93.12`: an **official model-card self-reported OmniDocBench v1.5 score**
+- `PaddleOCR-VL-1.5 94.5`: a **paper-reported OmniDocBench v1.5 score**
+- `dots.mocr 1124.7`: an **Elo aggregate score across multiple benchmarks** from the project README
+- `dots.mocr-svg 0.931 / 0.905`: **SVG-specific task scores** on UniSVG / ChartMimic
+
+That means `94.62` and `1124.7` are not directly comparable. The first is a raw benchmark score; the second is an author-built Elo aggregate.
+
+This is also why this software does not chase a single “one model does everything” answer:
+
+- **GLM-OCR** remains the default daily document OCR path
+- **Qianfan-OCR** is a strong cloud structured-OCR backend
+- **dots.mocr-svg** is the most relevant path for turning charts, UI, and logos into editable SVG assets
+
+Also, many people remember the older `PaddleOCR` toolkit line. The models compared here, `PaddleOCR-VL` and `PaddleOCR-VL-1.5`, belong to the **newer VL document parsing branch that formed between 2025-10 and 2026-01**, and should not be confused with the older product line.
 
 ### Pricing
 
@@ -76,15 +93,20 @@ Standard per-token rate: ¥0.2/M tokens (~$0.03 / €0.03), roughly 1/100 the co
 
 ### Comparison Summary
 
-| Solution | OmniDocBench v1.5 | Best For | Weaknesses | Deployment |
-|----------|--------------------|----------|------------|------------|
-| **Unisound U1** (Unisound / 云知声) | **95.1** | Medical/clinical docs, field-level positioning & traceability, 50+ doc types (99%+ classification), extreme scenarios (blurred, multilingual) | Newer, less community testing, no public API pricing yet | Cloud API / On-premise |
-| **GLM-OCR** (ZhipuAI / 智谱) | **94.62** | Structured documents, formulas, domain-specific text. 0.9B params, ~1.86 pages/sec, API ~0.2 CNY/M tokens (1/10 of traditional OCR) | Cannot extract images, no bounding box, hallucination on blurry text | Cloud API / VLLM local |
-| **PaddleOCR VL 1.5** (Baidu / 百度) | **94.5** | Handwriting, tables, distorted images | CUDA dependency hell, weak at logical restructuring | Local GPU only |
-| **MinerU 2.5** (OpenDataLab) | 90.67 | Clean PDFs with simple layout | Character errors on complex layouts | Local GPU only |
-| **DeepSeek OCR** (DeepSeek / 深度求索) | 87.01 | Tables (zero info loss) | Formula errors, images discarded | Cloud API |
-| **Gemini-2.5 Pro** (Google) | 88.03 | General-purpose VLM with decent OCR | Not OCR-specialized, $2.50/$15.00 per M tokens | Cloud API |
-| **GPT-4o** (OpenAI) | 75.02 | General-purpose VLM | Poor OCR accuracy, $2.50/$10.00 per M tokens | Cloud API |
+| Solution | Key Score / Metric | Score Type | Best For | Weaknesses | Deployment |
+|----------|--------------------|------------|----------|------------|------------|
+| **GLM-OCR** (ZhipuAI / 智谱) | `94.62` | Raw OmniDocBench v1.5 score (official) | Textbooks, lecture notes, formula-heavy documents, and the default path of this software | Does not directly produce SVG; weak editable-asset story | Cloud API / VLLM local |
+| **Qianfan-OCR** (Baidu Qianfan / 百度千帆) | `93.12` | OmniDocBench v1.5 self-reported score (official model card) | Markdown plus JSON structured output and cloud parsing of complex layouts | More focused on structured text than SVG assets | Cloud API |
+| **PaddleOCR-VL-1.5** (Baidu / 百度) | `94.5` | OmniDocBench v1.5 self-reported score (paper) | Offline deployment, privacy-sensitive docs, strong structured parsing | Higher deployment cost; not ideal as your lightweight daily default | Local GPU / service deployment |
+| **dots.ocr** (rednote-hilab) | `88.41` | Raw OmniDocBench v1.5 score | Markdown plus JSON plus bbox structure | Complex tables and math are not its strongest area | Local / vLLM |
+| **dots.mocr** (rednote-hilab) | `1124.7` | Multi-benchmark Elo aggregate (official README) | Charts, UI, visual understanding, multimodal structured assets | Elo scores should not be mixed directly with raw OmniDocBench scores | Local / vLLM |
+| **dots.mocr-svg** (rednote-hilab) | `UniSVG 0.931` / `ChartMimic 0.905` | SVG-specific task scores | Charts, UI, logos, and editable visual assets | Not a primary whole-document OCR model; better as a visual-asset pipeline stage | Local / vLLM / API wrapper |
+
+For this product, the current best division of labor is:
+
+1. **GLM-OCR** as the default document OCR pipeline
+2. **Qianfan-OCR** as the cloud structured parsing backend
+3. **dots.mocr-svg** as the editable SVG asset pipeline
 
 ### Why Cloud API?
 
@@ -96,7 +118,10 @@ The script architecture is model-agnostic — swapping to a different API (DeepS
 > - [5-model OCR benchmark with detailed test cases (2026.02)](https://www.bilibili.com/video/BV1UjFjz1EdD/) by [@AI创客空间](https://space.bilibili.com/396997624)
 > - [OCR model selection guide (2026.02)](https://www.bilibili.com/video/BV1GYF7z9E7n/) by [@从零开始学AI](https://space.bilibili.com/91394217)
 > - [OmniDocBench v1.5 benchmark](https://github.com/opendatalab/OmniDocBench)
-> - [Unisound U1 OCR announcement](https://www.bilibili.com/video/BV1rqAUzAE4z/)
+> - [GLM-OCR official documentation](https://docs.bigmodel.cn/cn/guide/models/vlm/glm-ocr)
+> - [Qianfan-OCR official model card](https://huggingface.co/baidu/Qianfan-OCR)
+> - [PaddleOCR-VL-1.5 paper](https://arxiv.org/abs/2601.21957)
+> - [dots.mocr official README](https://github.com/rednote-hilab/dots.mocr)
 
 ## Quick Start
 
@@ -137,6 +162,32 @@ python audit_ocr_integrity.py
 Only treat an OCR batch as complete when both checks are clean and the relevant `output/<file>/` directory has no `_failed_segments/*.failed.json`.
 
 Detailed audit convention for non-GLM page supplementation: [OCR_AUDIT_POLICY.md](OCR_AUDIT_POLICY.md)
+
+## Studio Prototype
+
+The repository now includes an early desktop-shell prototype named `GLM OCR Studio`.
+It is meant to address two practical problems first:
+
+- OCR provider differences are hard to remember
+- advanced manual tools are scattered across scripts
+
+The current prototype already provides:
+
+- bilingual UI switching
+- a provider capability board for GLM-OCR, Qianfan-OCR, Qianfan-OCR-Fast, GLM handwriting, dots.ocr, dots.mocr, dots.mocr-svg, PaddleOCR-VL 1.5, and PP-StructureV3
+- a visual memory board for the existing manual workflow and script entry points
+- a staged refactor plan
+
+Run it with:
+
+```bash
+python ocr_studio.py
+```
+
+Refactor plan documents:
+
+- English: [docs/STUDIO_REFACTOR_PLAN.md](docs/STUDIO_REFACTOR_PLAN.md)
+- 简体中文: [docs/STUDIO_REFACTOR_PLAN_CN.md](docs/STUDIO_REFACTOR_PLAN_CN.md)
 
 ## Output Structure
 

@@ -1,6 +1,8 @@
 [English](README.md) | 简体中文
 
-# GLM-OCR — PDF/PPT/图片转Markdown OCR工具
+# GLM OCR
+
+> PDF/PPT/图片转 Markdown OCR 工具
 
 使用[智谱 GLM-OCR](https://open.bigmodel.cn/) API 批量将文档转换为干净的 Markdown —— 2026 年初 [OmniDocBench v1.5 榜首模型](https://opendatalab.com/omnidocbench)。零 GPU 要求，支持 LaTeX 公式，并发处理，断点续传。
 
@@ -13,6 +15,7 @@
   - [方案对比总结](#方案对比总结)
   - [为什么用云端 API？](#为什么用云端-api)
 - [快速开始](#快速开始)
+- [Studio 原型](#studio-原型)
 - [输出结构](#输出结构)
 - [验收与失败语义](#验收与失败语义)
 - [常见问题与推荐做法](#常见问题与推荐做法)
@@ -56,9 +59,23 @@
 
 ## 为什么选择 GLM？
 
-[OmniDocBench v1.5](https://opendatalab.com/omnidocbench)（[GitHub](https://github.com/opendatalab/OmniDocBench)）是目前最全面的 OCR 评测基准。截至 2026 年 2 月初，GLM-OCR 在 5 模型对比测试中综合排名**第一**（vs DeepSeek OCR2、MinerU、PaddleOCR VL、PaddleOCR VL 1.5）。2026 年 2 月底，[云知声 U1](https://www.bilibili.com/video/BV1rqAUzAE4z/) 在榜单上超越了 GLM-OCR（95.1 vs 94.62），尤其在医疗/病历文档场景表现突出。
+[OmniDocBench v1.5](https://opendatalab.com/omnidocbench)（[GitHub](https://github.com/opendatalab/OmniDocBench)）仍然是最值得看的文档解析基准之一，但 2026 年这波 OCR 模型有一个很容易混淆的点：**并不是所有“高分”都来自同一种评价口径**。
 
-作为参考，通用大模型在 OmniDocBench 上的 OCR 分数远低于专用模型：**GPT-4o** 仅 75.02，**Gemini-2.5 Pro** 88.03，**Qwen3-VL-235B** 89.15 —— 专用 OCR 模型如 GLM-OCR（仅 0.9B 参数）以极小的体积和成本大幅超越它们。
+- `GLM-OCR 94.62`：智谱官方文档给出的 **OmniDocBench v1.5 原始分**
+- `Qianfan-OCR 93.12`：百度官方模型卡给出的 **OmniDocBench v1.5 自报分**
+- `PaddleOCR-VL-1.5 94.5`：论文里的 **OmniDocBench v1.5 自报分**
+- `dots.mocr 1124.7`：官方 README 里的 **跨多个 benchmark 的 Elo 综合分**
+- `dots.mocr-svg 0.931 / 0.905`：SVG 专项任务 **UniSVG / ChartMimic** 分数
+
+所以，`94.62` 和 `1124.7` 不能直接横比；前者是原始 benchmark 分，后者是作者自己做的 Elo 综合评估。
+
+这也是这个软件为什么不直接追求“单模型通吃”的原因：
+
+- **GLM-OCR**：继续当默认文档 OCR 主力，适合教材、讲义、公式文档
+- **Qianfan-OCR**：更适合作为云端结构化 OCR 增强后端
+- **dots.mocr-svg**：最适合把图表、UI、logo 等图片真正变成可编辑 SVG 资产
+
+另外，很多人对 `PaddleOCR` 的印象来自更早的老工具箱路线；而这里对比的 `PaddleOCR-VL` / `PaddleOCR-VL-1.5` 属于 **2025-10 到 2026-01 才成型的新 VL 文档解析分支**，不应和更早那代产品混为一谈。
 
 ### 价格
 
@@ -76,15 +93,20 @@
 
 ### 方案对比总结
 
-| 方案 | OmniDocBench v1.5 | 最适合 | 劣势 | 部署方式 |
-|------|--------------------|--------|------|----------|
-| **云知声 U1**（Unisound） | **95.1** | 医疗/病历文档，字段级定位溯源，50+ 文档类型分类（99%+），极端场景（模糊、多语言） | 较新，社区实测较少，API 定价未公开 | 云端 API / 私有化部署 |
-| **GLM-OCR**（智谱 ZhipuAI） | **94.62** | 结构化文档、公式、专业术语。0.9B 参数，~1.86页/秒，API 仅 0.2元/百万 token（传统 OCR 的 1/10） | 不能提取图片，无 bbox 输出，模糊文字有幻觉 | 云端 API / VLLM 本地 |
-| **PaddleOCR VL 1.5**（百度 Baidu） | **94.5** | 手写体、表格、物理畸变图片 | CUDA 依赖地狱，逻辑重组能力弱 | 仅本地 GPU |
-| **MinerU 2.5**（OpenDataLab） | 90.67 | 排版简单的干净 PDF | 复杂版面错字多 | 仅本地 GPU |
-| **DeepSeek OCR**（深度求索 DeepSeek） | 87.01 | 表格（信息零丢失） | 公式错误，图片丢弃 | 云端 API |
-| **Gemini-2.5 Pro**（Google） | 88.03 | 通用大模型，OCR 能力尚可 | 非 OCR 专用，$2.50/$15.00 每百万 tokens | 云端 API |
-| **GPT-4o**（OpenAI） | 75.02 | 通用大模型 | OCR 精度低，$2.50/$10.00 每百万 tokens | 云端 API |
+| 方案 | 关键分数 / 指标 | 分数口径 | 最适合 | 劣势 | 部署方式 |
+|------|-----------------|----------|--------|------|----------|
+| **GLM-OCR**（智谱 ZhipuAI） | `94.62` | OmniDocBench v1.5 原始分（官方） | 教材、讲义、公式密集文档，当前默认主力 | 不能直接产出 SVG，可编辑图形资产能力弱 | 云端 API / VLLM 本地 |
+| **Qianfan-OCR**（百度千帆） | `93.12` | OmniDocBench v1.5 自报分（官方模型卡） | Markdown + JSON 结构化输出，云端复杂版面解析 | 目前产品卖点更偏结构化文本，不是 SVG 路线 | 云端 API |
+| **PaddleOCR-VL-1.5**（百度） | `94.5` | OmniDocBench v1.5 自报分（论文） | 离线部署、隐私材料、强结构化解析 | 部署成本高，不适合你当前默认个人轻量工作流 | 本地 GPU / 服务化 |
+| **dots.ocr**（rednote-hilab） | `88.41` | OmniDocBench v1.5 原始分 | Markdown + JSON + bbox 结构层 | 复杂表格与公式不是强项 | 本地 / vLLM |
+| **dots.mocr**（rednote-hilab） | `1124.7` | 多 benchmark Elo 综合分（官方 README） | 图表、UI、视觉理解、多模态结构化资产 | 不能把 Elo 分数和 OmniDocBench 原始分直接混比 | 本地 / vLLM |
+| **dots.mocr-svg**（rednote-hilab） | `UniSVG 0.931` / `ChartMimic 0.905` | SVG 专项任务分 | 图表、UI、logo、可编辑图形资产 | 不是整本文档 OCR 主模型，更适合作为图形资产管线 | 本地 / vLLM / API 封装 |
+
+对这个项目来说，当前最合理的产品分工是：
+
+1. **GLM-OCR** 做默认文档 OCR 主链路
+2. **Qianfan-OCR** 做云端结构化增强后端
+3. **dots.mocr-svg** 做 SVG 可编辑图形资产管线
 
 ### 为什么用云端 API？
 
@@ -96,7 +118,10 @@
 > - [5 模型 OCR 实测对比（2026.02）](https://www.bilibili.com/video/BV1UjFjz1EdD/) by [@AI创客空间](https://space.bilibili.com/396997624)
 > - [OCR 模型选型指南（2026.02）](https://www.bilibili.com/video/BV1GYF7z9E7n/) by [@从零开始学AI](https://space.bilibili.com/91394217)
 > - [OmniDocBench v1.5 榜单](https://github.com/opendatalab/OmniDocBench)
-> - [云知声 U1 OCR 发布](https://www.bilibili.com/video/BV1rqAUzAE4z/)
+> - [GLM-OCR 官方文档](https://docs.bigmodel.cn/cn/guide/models/vlm/glm-ocr)
+> - [Qianfan-OCR 官方模型卡](https://huggingface.co/baidu/Qianfan-OCR)
+> - [PaddleOCR-VL-1.5 论文](https://arxiv.org/abs/2601.21957)
+> - [dots.mocr 官方 README](https://github.com/rednote-hilab/dots.mocr)
 
 ## 快速开始
 
@@ -137,6 +162,31 @@ python audit_ocr_integrity.py
 只有当这两个检查都通过，且对应 `output/<文件名>/` 下没有 `_failed_segments/*.failed.json` 时，才应把这批 OCR 视为真正完成。
 
 关于“非 GLM 补页”的正式审计约定，见：[OCR_AUDIT_POLICY_CN.md](OCR_AUDIT_POLICY_CN.md)
+
+## Studio 原型
+
+项目里现在新增了一版正在孵化中的桌面壳 `GLM OCR Studio`，用来先解决两个最实际的问题：
+
+- 不同 OCR 模型的能力差异难记
+- 高级功能散落在脚本里，缺少可视化入口
+
+当前原型已经支持：
+
+- 中英界面切换
+- 模型能力总览（GLM-OCR、Qianfan-OCR、Qianfan-OCR-Fast、GLM 手写、dots.ocr、dots.mocr、dots.mocr-svg、PaddleOCR-VL 1.5、PP-StructureV3）
+- 现有手动工作流与脚本入口的可视化记忆板
+- 重构落地顺序说明
+
+运行方式：
+
+```bash
+python ocr_studio.py
+```
+
+重构蓝图文档：
+
+- 中文：[docs/STUDIO_REFACTOR_PLAN_CN.md](docs/STUDIO_REFACTOR_PLAN_CN.md)
+- English: [docs/STUDIO_REFACTOR_PLAN.md](docs/STUDIO_REFACTOR_PLAN.md)
 
 ## 输出结构
 
