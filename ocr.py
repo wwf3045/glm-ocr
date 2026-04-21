@@ -70,6 +70,7 @@ from pdf_backend import (
 load_dotenv()
 API_KEY = os.getenv("GLM_API_KEY", "")
 BASE_URL = os.getenv("ZAI_BASE_URL","")
+MODEL_ID = os.getenv("MODEL_ID","glm-ocr")
 INPUT_DIR = Path(__file__).parent / "input"
 OUTPUT_DIR = Path(__file__).parent / "output"
 CACHE_DIR = Path(__file__).parent / "_cache"
@@ -238,7 +239,7 @@ def call_glm_ocr_raw(client: ZaiClient, file_path: str):
     for attempt in range(1, RETRY_TIMES + 1):
         try:
             resp = client.layout_parsing.create(
-                model="glm-ocr",
+                model=MODEL_ID,
                 file=data_uri,
             )
             return resp, None
@@ -713,7 +714,7 @@ def ocr_single_image_b64(client: ZaiClient, img_b64: str):
     for attempt in range(1, RETRY_TIMES + 1):
         try:
             resp = client.layout_parsing.create(
-                model="glm-ocr",
+                model=MODEL_ID,
                 file=data_uri,
             )
             return get_md_from_response(resp), None
