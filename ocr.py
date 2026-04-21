@@ -69,7 +69,7 @@ from pdf_backend import (
 # ============================================================
 load_dotenv()
 API_KEY = os.getenv("GLM_API_KEY", "")
-
+BASE_URL = os.getenv("ZAI_BASE_URL","")
 INPUT_DIR = Path(__file__).parent / "input"
 OUTPUT_DIR = Path(__file__).parent / "output"
 CACHE_DIR = Path(__file__).parent / "_cache"
@@ -1250,10 +1250,12 @@ def main():
     mode = "手写识别" if args.handwrite else "GLM-OCR"
 
     if args.handwrite:
-        hw_client = ZhipuAiClient(api_key=API_KEY)
+        hw_client = ZhipuAiClient(api_key=API_KEY,
+                                 base_url=BASE_URL)
         print(f"[ok] 手写识别客户端已初始化（ZhipuAiClient）")
     else:
-        client = ZaiClient(api_key=API_KEY)
+        client = ZaiClient(api_key=API_KEY,
+                          base_url=BASE_URL)
         print(f"[ok] API 客户端已初始化")
 
     print(f"[ok] 模式: {mode}")
