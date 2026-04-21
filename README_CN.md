@@ -141,7 +141,7 @@ https://github.com/wwf3045/glm-ocr/blob/main/README_CN.md
 
 ```
 GLM_API_KEY=你的API密钥
-GLM_BASE_URL=本地部署时的URL(仅本地部署）
+ZAI_BASE_URL=本地部署时的URL(仅本地部署）
 MODEL_ID=模型ID（仅本地部署）
 ```
 
