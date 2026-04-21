@@ -141,7 +141,7 @@ Create a `.env` file in the project root:
 
 ```
 GLM_API_KEY=your_api_key_here
-GLM_BASE_URL=your_local_url(only local)
+ZAI_BASE_URL=your_local_url(only local)
 MODEL_ID=your_model_id(only local)
 ```
 
