@@ -134,13 +134,15 @@
 ```bash
 pip install -r requirements.txt
 ```
-
+https://github.com/wwf3045/glm-ocr/blob/main/README_CN.md
 ### 3. 配置
 
 在项目根目录创建 `.env` 文件：
 
 ```
 GLM_API_KEY=你的API密钥
+GLM_BASE_URL=本地部署时的URL(仅本地部署）
+MODEL_ID=模型ID（仅本地部署）
 ```
 
 ### 4. 运行
